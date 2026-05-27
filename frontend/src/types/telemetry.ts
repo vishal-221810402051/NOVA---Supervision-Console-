@@ -125,3 +125,12 @@ export type DeviceRegistryEntry = {
   online: boolean;
   status_message: string;
 };
+
+export type HealthCheckResult = "PASS" | "FAIL" | "WARNING";
+
+export type HealthCheckRule = {
+  rule_id: string;
+  label: string;
+  result: HealthCheckResult;
+  details: string;
+};
