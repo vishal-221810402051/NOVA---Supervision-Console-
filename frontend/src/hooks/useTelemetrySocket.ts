@@ -2,6 +2,15 @@ import { useEffect } from "react";
 import { useTelemetryStore } from "../store/telemetryStore";
 import type { TelemetryPacket } from "../types/telemetry";
 
+const TELEMETRY_WS_URL = "ws://127.0.0.1:8000/ws/telemetry";
+const RECONNECT_DELAY_MS = 2000;
+
+let activeSocket: WebSocket | null = null;
+let reconnectTimer: number | null = null;
+let agingTimer: number | null = null;
+let activeSessionId = 0;
+let subscriberCount = 0;
+
 function isValidTelemetryPacket(packet: unknown): packet is TelemetryPacket {
   if (!packet || typeof packet !== "object") return false;
 
@@ -17,59 +26,117 @@ function isValidTelemetryPacket(packet: unknown): packet is TelemetryPacket {
   );
 }
 
+function clearReconnectTimer() {
+  if (reconnectTimer !== null) {
+    window.clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+}
+
+function closeActiveSocket() {
+  if (!activeSocket) return;
+
+  activeSocket.onopen = null;
+  activeSocket.onmessage = null;
+  activeSocket.onerror = null;
+  activeSocket.onclose = null;
+
+  if (
+    activeSocket.readyState === WebSocket.CONNECTING ||
+    activeSocket.readyState === WebSocket.OPEN
+  ) {
+    activeSocket.close();
+  }
+
+  activeSocket = null;
+}
+
+function ensureAgingTimer() {
+  if (agingTimer !== null) return;
+
+  agingTimer = window.setInterval(() => {
+    useTelemetryStore.getState().ageRegistry();
+  }, 1000);
+}
+
+function stopAgingTimer() {
+  if (agingTimer !== null) {
+    window.clearInterval(agingTimer);
+    agingTimer = null;
+  }
+}
+
+function connectTelemetrySocket(sessionId: number) {
+  clearReconnectTimer();
+  closeActiveSocket();
+
+  useTelemetryStore.getState().setConnectionState("CONNECTING");
+
+  const socket = new WebSocket(TELEMETRY_WS_URL);
+  activeSocket = socket;
+
+  socket.onopen = () => {
+    if (sessionId !== activeSessionId || socket !== activeSocket) return;
+
+    useTelemetryStore.getState().resetPacketStats();
+    useTelemetryStore.getState().setConnectionState("CONNECTED");
+  };
+
+  socket.onmessage = (event) => {
+    if (sessionId !== activeSessionId || socket !== activeSocket) return;
+
+    try {
+      const parsed = JSON.parse(event.data);
+
+      if (isValidTelemetryPacket(parsed)) {
+        useTelemetryStore.getState().ingestPacket(parsed);
+      }
+    } catch {
+      useTelemetryStore.getState().setConnectionState("RECONNECTING");
+    }
+  };
+
+  socket.onerror = () => {
+    if (sessionId !== activeSessionId || socket !== activeSocket) return;
+
+    useTelemetryStore.getState().setConnectionState("RECONNECTING");
+  };
+
+  socket.onclose = () => {
+    if (sessionId !== activeSessionId || socket !== activeSocket) return;
+
+    activeSocket = null;
+    useTelemetryStore.getState().setConnectionState("RECONNECTING");
+    clearReconnectTimer();
+
+    reconnectTimer = window.setTimeout(() => {
+      if (sessionId === activeSessionId && subscriberCount > 0) {
+        connectTelemetrySocket(sessionId);
+      }
+    }, RECONNECT_DELAY_MS);
+  };
+}
+
 export function useTelemetrySocket() {
-  const setConnectionState = useTelemetryStore((s) => s.setConnectionState);
-  const ingestPacket = useTelemetryStore((s) => s.ingestPacket);
-
   useEffect(() => {
-    let reconnectTimer: number | null = null;
-    let socket: WebSocket | null = null;
+    subscriberCount += 1;
 
-    const connect = () => {
-      setConnectionState("CONNECTING");
-      socket = new WebSocket("ws://127.0.0.1:8000/ws/telemetry");
-
-      socket.onopen = () => {
-        useTelemetryStore.getState().resetPacketStats();
-        setConnectionState("CONNECTED");
-      };
-
-      socket.onmessage = (event) => {
-        try {
-          const parsed = JSON.parse(event.data);
-
-          if (isValidTelemetryPacket(parsed)) {
-            ingestPacket(parsed);
-          }
-        } catch {
-          setConnectionState("RECONNECTING");
-        }
-      };
-
-      socket.onerror = () => {
-        setConnectionState("RECONNECTING");
-      };
-
-      socket.onclose = () => {
-        setConnectionState("RECONNECTING");
-
-        reconnectTimer = window.setTimeout(() => {
-          connect();
-        }, 2000);
-      };
-    };
-
-    connect();
-
-    const agingTimer = window.setInterval(() => {
-      useTelemetryStore.getState().ageRegistry();
-    }, 1000);
+    if (subscriberCount === 1) {
+      activeSessionId += 1;
+      ensureAgingTimer();
+      connectTelemetrySocket(activeSessionId);
+    }
 
     return () => {
-      if (reconnectTimer) window.clearTimeout(reconnectTimer);
-      window.clearInterval(agingTimer);
-      socket?.close();
-      setConnectionState("OFFLINE");
+      subscriberCount = Math.max(0, subscriberCount - 1);
+
+      if (subscriberCount === 0) {
+        activeSessionId += 1;
+        clearReconnectTimer();
+        closeActiveSocket();
+        stopAgingTimer();
+        useTelemetryStore.getState().setConnectionState("OFFLINE");
+      }
     };
-  }, [setConnectionState, ingestPacket]);
+  }, []);
 }

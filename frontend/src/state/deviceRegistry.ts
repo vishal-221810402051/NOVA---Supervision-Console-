@@ -26,16 +26,16 @@ export type DeviceRegistry = Record<string, DeviceRegistryEntry>;
 
 export function createInitialDeviceRegistry(): DeviceRegistry {
   return {
-    [DEVICE_IDS.MAIN_MCU]: nodeDevice("MAIN ESP32-S3", "esp32_motion"),
-    [DEVICE_IDS.SUB_MCU]: nodeDevice("SUB ESP32-S3", "esp32_qc"),
-    [DEVICE_IDS.WIFI_LINK]: linkDevice("WiFi Link", "WIFI"),
-    [DEVICE_IDS.MAIN_SUB_UART]: linkDevice("MAIN↔SUB UART", "UART"),
+    [DEVICE_IDS.MAIN_MCU]: nodeDevice(DEVICE_IDS.MAIN_MCU, "MAIN ESP32-S3", "esp32_motion"),
+    [DEVICE_IDS.SUB_MCU]: nodeDevice(DEVICE_IDS.SUB_MCU, "SUB ESP32-S3", "esp32_qc"),
+    [DEVICE_IDS.WIFI_LINK]: linkDevice(DEVICE_IDS.WIFI_LINK, "WiFi Link", "WIFI"),
+    [DEVICE_IDS.MAIN_SUB_UART]: linkDevice(DEVICE_IDS.MAIN_SUB_UART, "MAIN / SUB UART", "UART"),
 
-    [DEVICE_IDS.ADS1115]: i2cDevice("ADS1115 ADC", "0x48"),
-    [DEVICE_IDS.DS3231]: i2cDevice("DS3231 RTC", "0x68"),
-    [DEVICE_IDS.PCA9685_1]: i2cDevice("PCA9685 #1", "0x40"),
-    [DEVICE_IDS.PCA9685_2]: i2cDevice("PCA9685 #2", "0x41"),
-    [DEVICE_IDS.PCA9685_ALLCALL]: i2cDevice("PCA9685 AllCall", "0x70"),
+    [DEVICE_IDS.ADS1115]: i2cDevice(DEVICE_IDS.ADS1115, "ADS1115 ADC", "0x48"),
+    [DEVICE_IDS.DS3231]: i2cDevice(DEVICE_IDS.DS3231, "DS3231 RTC", "0x68"),
+    [DEVICE_IDS.PCA9685_1]: i2cDevice(DEVICE_IDS.PCA9685_1, "PCA9685 #1", "0x40"),
+    [DEVICE_IDS.PCA9685_2]: i2cDevice(DEVICE_IDS.PCA9685_2, "PCA9685 #2", "0x41"),
+    [DEVICE_IDS.PCA9685_ALLCALL]: i2cDevice(DEVICE_IDS.PCA9685_ALLCALL, "PCA9685 AllCall", "0x70"),
 
     [DEVICE_IDS.FRAM]: {
       device_id: DEVICE_IDS.FRAM,
@@ -50,15 +50,19 @@ export function createInitialDeviceRegistry(): DeviceRegistry {
       status_message: "Blocked until correct SPI FRAM is installed",
     },
 
-    [DEVICE_IDS.VIN_PROTECTED]: powerRail("VIN Protected"),
-    [DEVICE_IDS.RAIL_5V]: powerRail("+5V Logic"),
-    [DEVICE_IDS.RAIL_3V3]: powerRail("+3V3 Logic"),
+    [DEVICE_IDS.VIN_PROTECTED]: powerRail(DEVICE_IDS.VIN_PROTECTED, "VIN Protected"),
+    [DEVICE_IDS.RAIL_5V]: powerRail(DEVICE_IDS.RAIL_5V, "+5V Logic"),
+    [DEVICE_IDS.RAIL_3V3]: powerRail(DEVICE_IDS.RAIL_3V3, "+3V3 Logic"),
   };
 }
 
-function nodeDevice(display_name: string, node_id: string): DeviceRegistryEntry {
+function nodeDevice(
+  device_id: string,
+  display_name: string,
+  node_id: string
+): DeviceRegistryEntry {
   return {
-    device_id: node_id,
+    device_id,
     display_name,
     kind: "NODE",
     node_id,
@@ -71,11 +75,12 @@ function nodeDevice(display_name: string, node_id: string): DeviceRegistryEntry 
 }
 
 function linkDevice(
+  device_id: string,
   display_name: string,
   bus: "UART" | "WIFI"
 ): DeviceRegistryEntry {
   return {
-    device_id: display_name.toLowerCase().replaceAll(" ", "_"),
+    device_id,
     display_name,
     kind: "NODE",
     bus,
@@ -87,9 +92,13 @@ function linkDevice(
   };
 }
 
-function i2cDevice(display_name: string, address: string): DeviceRegistryEntry {
+function i2cDevice(
+  device_id: string,
+  display_name: string,
+  address: string
+): DeviceRegistryEntry {
   return {
-    device_id: display_name.toLowerCase().replaceAll(" ", "_"),
+    device_id,
     display_name,
     kind: "I2C_DEVICE",
     bus: "I2C",
@@ -102,9 +111,9 @@ function i2cDevice(display_name: string, address: string): DeviceRegistryEntry {
   };
 }
 
-function powerRail(display_name: string): DeviceRegistryEntry {
+function powerRail(device_id: string, display_name: string): DeviceRegistryEntry {
   return {
-    device_id: display_name.toLowerCase().replaceAll(" ", "_"),
+    device_id,
     display_name,
     kind: "POWER_RAIL",
     bus: "POWER",
