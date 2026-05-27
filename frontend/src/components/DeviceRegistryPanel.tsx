@@ -14,16 +14,21 @@ export function DeviceRegistryPanel() {
         {devices.map((device) => (
           <div
             key={device.device_id}
-            className="grid grid-cols-6 items-center border border-slate-800 bg-slate-900 p-3 text-xs"
+            className="grid grid-cols-7 items-center border border-slate-800 bg-slate-900 p-3 text-xs"
           >
             <div className="font-semibold text-cyan-100">{device.display_name}</div>
             <div className="text-slate-400">{device.kind}</div>
-            <div className="text-slate-400">{device.bus ?? "—"}</div>
+            <div className="text-slate-400">{device.bus ?? "-"}</div>
             <div className="font-mono text-slate-300">
-              {device.address ?? device.chip_select ?? device.node_id ?? "—"}
+              {device.address ?? device.chip_select ?? device.node_id ?? "-"}
             </div>
             <div className={stateClass(device.health_state)}>
               {device.health_state}
+            </div>
+            <div className="font-mono text-slate-400">
+              {device.heartbeat_age_ms === null
+                ? "-"
+                : `${Math.round(device.heartbeat_age_ms)} ms`}
             </div>
             <div className="text-slate-400">{device.status_message}</div>
           </div>

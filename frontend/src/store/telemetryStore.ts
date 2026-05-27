@@ -8,6 +8,7 @@ import type {
   TelemetryPacket,
 } from "../types/telemetry";
 import {
+  ageDeviceRegistry,
   createInitialDeviceRegistry,
   getRegistrySummary,
   updateRegistryFromChipStatus,
@@ -31,6 +32,8 @@ type TelemetryState = {
 
   setConnectionState: (state: ConnectionState) => void;
   ingestPacket: (packet: TelemetryPacket) => void;
+  ageRegistry: () => void;
+  resetPacketStats: () => void;
 };
 
 function getSeverity(packet: TelemetryPacket): EngineeringLog["severity"] {
@@ -65,6 +68,24 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   logs: [],
 
   setConnectionState: (state) => set({ connectionState: state }),
+
+  ageRegistry: () =>
+    set((state) => {
+      const agedRegistry = ageDeviceRegistry(state.deviceRegistry);
+
+      return {
+        deviceRegistry: agedRegistry,
+        registrySummary: getRegistrySummary(agedRegistry),
+      };
+    }),
+
+  resetPacketStats: () =>
+    set({
+      packetCount: 0,
+      lastSequenceNumber: null,
+      missedPackets: 0,
+      logs: [],
+    }),
 
   ingestPacket: (packet) =>
     set((state) => {

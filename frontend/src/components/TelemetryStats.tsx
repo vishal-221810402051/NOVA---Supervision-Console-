@@ -5,13 +5,16 @@ export function TelemetryStats() {
   const lastSequenceNumber = useTelemetryStore((s) => s.lastSequenceNumber);
   const missedPackets = useTelemetryStore((s) => s.missedPackets);
   const lastPacketAt = useTelemetryStore((s) => s.lastPacketAt);
+  const registrySummary = useTelemetryStore((s) => s.registrySummary);
 
   return (
-    <section className="grid grid-cols-4 gap-3">
+    <section className="grid grid-cols-6 gap-3">
       <Metric label="Packet Count" value={packetCount.toString()} />
       <Metric label="Last Sequence" value={lastSequenceNumber?.toString() ?? "N/A"} />
       <Metric label="Missed Packets" value={missedPackets.toString()} />
       <Metric label="Last Packet UTC" value={lastPacketAt ?? "NO PACKET"} />
+      <Metric label="Healthy Devices" value={registrySummary.healthy.toString()} />
+      <Metric label="Offline Devices" value={registrySummary.offline.toString()} />
     </section>
   );
 }

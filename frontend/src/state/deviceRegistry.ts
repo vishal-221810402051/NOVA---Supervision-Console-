@@ -1,6 +1,7 @@
 import type {
   ChipStatusPayload,
   DeviceRegistryEntry,
+  HealthState,
   PowerHealthPayload,
   SystemHealthPayload,
 } from "../types/telemetry";
@@ -253,4 +254,53 @@ export function getRegistrySummary(registry: DeviceRegistry) {
     offline,
     failSafe,
   };
+}
+
+export function ageDeviceRegistry(
+  registry: DeviceRegistry,
+  nowMs: number = Date.now()
+): DeviceRegistry {
+  const next: DeviceRegistry = {};
+
+  for (const [id, device] of Object.entries(registry)) {
+    if (!device.last_seen_utc) {
+      next[id] = device;
+      continue;
+    }
+
+    const lastSeenMs = new Date(device.last_seen_utc).getTime();
+    const heartbeatAgeMs = Math.max(0, nowMs - lastSeenMs);
+
+    let healthState: HealthState = device.health_state;
+    let online = device.online;
+    let statusMessage = device.status_message;
+
+    if (device.device_id === DEVICE_IDS.FRAM) {
+      next[id] = {
+        ...device,
+        heartbeat_age_ms: heartbeatAgeMs,
+      };
+      continue;
+    }
+
+    if (heartbeatAgeMs > 6000) {
+      healthState = "OFFLINE";
+      online = false;
+      statusMessage = `Telemetry timeout > 6000 ms`;
+    } else if (heartbeatAgeMs > 3000) {
+      healthState = "DEGRADED";
+      online = true;
+      statusMessage = `Telemetry stale > 3000 ms`;
+    }
+
+    next[id] = {
+      ...device,
+      heartbeat_age_ms: heartbeatAgeMs,
+      health_state: healthState,
+      online,
+      status_message: statusMessage,
+    };
+  }
+
+  return next;
 }

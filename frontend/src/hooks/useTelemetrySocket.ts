@@ -29,7 +29,10 @@ export function useTelemetrySocket() {
       setConnectionState("CONNECTING");
       socket = new WebSocket("ws://127.0.0.1:8000/ws/telemetry");
 
-      socket.onopen = () => setConnectionState("CONNECTED");
+      socket.onopen = () => {
+        useTelemetryStore.getState().resetPacketStats();
+        setConnectionState("CONNECTED");
+      };
 
       socket.onmessage = (event) => {
         try {
@@ -58,8 +61,13 @@ export function useTelemetrySocket() {
 
     connect();
 
+    const agingTimer = window.setInterval(() => {
+      useTelemetryStore.getState().ageRegistry();
+    }, 1000);
+
     return () => {
       if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      window.clearInterval(agingTimer);
       socket?.close();
       setConnectionState("OFFLINE");
     };
