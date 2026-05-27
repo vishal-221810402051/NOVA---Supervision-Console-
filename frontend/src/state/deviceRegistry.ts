@@ -304,3 +304,31 @@ export function ageDeviceRegistry(
 
   return next;
 }
+
+export function getGlobalSystemHealth(registry: DeviceRegistry): HealthState {
+  const devices = Object.values(registry);
+
+  const hasFailSafe = devices.some((d) => d.health_state === "FAIL_SAFE");
+  if (hasFailSafe) return "FAIL_SAFE";
+
+  const criticalIds = [
+    DEVICE_IDS.MAIN_MCU,
+    DEVICE_IDS.SUB_MCU,
+    DEVICE_IDS.WIFI_LINK,
+    DEVICE_IDS.MAIN_SUB_UART,
+    DEVICE_IDS.RAIL_5V,
+    DEVICE_IDS.RAIL_3V3,
+  ];
+
+  const criticalDevices = criticalIds.map((id) => registry[id]);
+
+  const criticalOffline = criticalDevices.some(
+    (d) => d?.health_state === "OFFLINE"
+  );
+  if (criticalOffline) return "OFFLINE";
+
+  const hasDegraded = devices.some((d) => d.health_state === "DEGRADED");
+  if (hasDegraded) return "DEGRADED";
+
+  return "HEALTHY";
+}

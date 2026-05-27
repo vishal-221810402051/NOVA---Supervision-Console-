@@ -8,6 +8,7 @@ import { EngineeringLogs } from "./components/EngineeringLogs";
 import { Sidebar } from "./components/Sidebar";
 import { TelemetryStats } from "./components/TelemetryStats";
 import { DeviceRegistryPanel } from "./components/DeviceRegistryPanel";
+import { GlobalStatusBar } from "./components/GlobalStatusBar";
 
 type Page = "overview" | "chips" | "power" | "logs" | "registry";
 
@@ -50,6 +51,7 @@ export default function App() {
         </header>
 
         <main className="grid gap-4 p-6">
+          <GlobalStatusBar />
           <TelemetryStats />
 
           {activePage === "overview" && <SystemOverview />}

@@ -10,6 +10,7 @@ import type {
 import {
   ageDeviceRegistry,
   createInitialDeviceRegistry,
+  getGlobalSystemHealth,
   getRegistrySummary,
   updateRegistryFromChipStatus,
   updateRegistryFromPowerHealth,
@@ -28,6 +29,8 @@ type TelemetryState = {
   powerHealth: PowerHealthPayload | null;
   deviceRegistry: DeviceRegistry;
   registrySummary: ReturnType<typeof getRegistrySummary>;
+  globalHealth: ReturnType<typeof getGlobalSystemHealth>;
+  isTelemetryStale: boolean;
   logs: EngineeringLog[];
 
   setConnectionState: (state: ConnectionState) => void;
@@ -65,6 +68,8 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   powerHealth: null,
   deviceRegistry: createInitialDeviceRegistry(),
   registrySummary: getRegistrySummary(createInitialDeviceRegistry()),
+  globalHealth: getGlobalSystemHealth(createInitialDeviceRegistry()),
+  isTelemetryStale: false,
   logs: [],
 
   setConnectionState: (state) => set({ connectionState: state }),
@@ -72,10 +77,17 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   ageRegistry: () =>
     set((state) => {
       const agedRegistry = ageDeviceRegistry(state.deviceRegistry);
+      const globalHealth = getGlobalSystemHealth(agedRegistry);
+      const isTelemetryStale =
+        state.lastPacketAt === null
+          ? true
+          : Date.now() - new Date(state.lastPacketAt).getTime() > 3000;
 
       return {
         deviceRegistry: agedRegistry,
         registrySummary: getRegistrySummary(agedRegistry),
+        globalHealth,
+        isTelemetryStale,
       };
     }),
 
@@ -153,6 +165,8 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
             : state.powerHealth,
         deviceRegistry,
         registrySummary: getRegistrySummary(deviceRegistry),
+        globalHealth: getGlobalSystemHealth(deviceRegistry),
+        isTelemetryStale: false,
         logs: [log, ...state.logs].slice(0, 100),
       };
     }),
