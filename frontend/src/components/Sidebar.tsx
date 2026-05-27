@@ -1,4 +1,11 @@
-type Page = "overview" | "chips" | "power" | "logs" | "registry" | "health";
+type Page =
+  | "overview"
+  | "chips"
+  | "power"
+  | "logs"
+  | "registry"
+  | "health"
+  | "report";
 
 type Props = {
   activePage: Page;
@@ -12,6 +19,7 @@ const items: { id: Page; label: string }[] = [
   { id: "logs", label: "Engineering Logs" },
   { id: "registry", label: "Device Registry" },
   { id: "health", label: "V1 Health Check" },
+  { id: "report", label: "Report Export" },
 ];
 
 export function Sidebar({ activePage, setActivePage }: Props) {
