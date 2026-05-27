@@ -1,4 +1,4 @@
-type Page = "overview" | "chips" | "power" | "logs";
+type Page = "overview" | "chips" | "power" | "logs" | "registry";
 
 type Props = {
   activePage: Page;
@@ -10,6 +10,7 @@ const items: { id: Page; label: string }[] = [
   { id: "chips", label: "Chip Status" },
   { id: "power", label: "Power Health" },
   { id: "logs", label: "Engineering Logs" },
+  { id: "registry", label: "Device Registry" },
 ];
 
 export function Sidebar({ activePage, setActivePage }: Props) {

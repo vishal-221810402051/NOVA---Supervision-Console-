@@ -108,3 +108,20 @@ export type EngineeringLog = {
   severity: LogSeverity;
   message: string;
 };
+
+export type DeviceKind = "NODE" | "I2C_DEVICE" | "SPI_DEVICE" | "POWER_RAIL";
+
+export type DeviceRegistryEntry = {
+  device_id: string;
+  display_name: string;
+  kind: DeviceKind;
+  bus?: "I2C" | "SPI" | "UART" | "WIFI" | "POWER";
+  address?: string;
+  chip_select?: string;
+  node_id?: string;
+  health_state: HealthState;
+  last_seen_utc: string | null;
+  heartbeat_age_ms: number | null;
+  online: boolean;
+  status_message: string;
+};

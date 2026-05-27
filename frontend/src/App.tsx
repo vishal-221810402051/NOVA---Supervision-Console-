@@ -7,8 +7,9 @@ import { PowerHealth } from "./components/PowerHealth";
 import { EngineeringLogs } from "./components/EngineeringLogs";
 import { Sidebar } from "./components/Sidebar";
 import { TelemetryStats } from "./components/TelemetryStats";
+import { DeviceRegistryPanel } from "./components/DeviceRegistryPanel";
 
-type Page = "overview" | "chips" | "power" | "logs";
+type Page = "overview" | "chips" | "power" | "logs" | "registry";
 
 export default function App() {
   useTelemetrySocket();
@@ -55,6 +56,7 @@ export default function App() {
           {activePage === "chips" && <ChipStatus />}
           {activePage === "power" && <PowerHealth />}
           {activePage === "logs" && <EngineeringLogs />}
+          {activePage === "registry" && <DeviceRegistryPanel />}
         </main>
       </div>
     </div>

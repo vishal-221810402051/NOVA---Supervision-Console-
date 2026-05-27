@@ -7,6 +7,14 @@ import type {
   SystemHealthPayload,
   TelemetryPacket,
 } from "../types/telemetry";
+import {
+  createInitialDeviceRegistry,
+  getRegistrySummary,
+  updateRegistryFromChipStatus,
+  updateRegistryFromPowerHealth,
+  updateRegistryFromSystemHealth,
+  type DeviceRegistry,
+} from "../state/deviceRegistry";
 
 type TelemetryState = {
   connectionState: ConnectionState;
@@ -17,6 +25,8 @@ type TelemetryState = {
   systemHealth: SystemHealthPayload | null;
   chipStatus: ChipStatusPayload | null;
   powerHealth: PowerHealthPayload | null;
+  deviceRegistry: DeviceRegistry;
+  registrySummary: ReturnType<typeof getRegistrySummary>;
   logs: EngineeringLog[];
 
   setConnectionState: (state: ConnectionState) => void;
@@ -50,6 +60,8 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   systemHealth: null,
   chipStatus: null,
   powerHealth: null,
+  deviceRegistry: createInitialDeviceRegistry(),
+  registrySummary: getRegistrySummary(createInitialDeviceRegistry()),
   logs: [],
 
   setConnectionState: (state) => set({ connectionState: state }),
@@ -75,6 +87,32 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         message: `${packet.event_type} received from ${packet.node_id}`,
       };
 
+      let deviceRegistry = state.deviceRegistry;
+
+      if (packet.event_type === "SYSTEM_HEALTH_TELEMETRY") {
+        deviceRegistry = updateRegistryFromSystemHealth(
+          deviceRegistry,
+          packet.payload,
+          packet.timestamp_utc
+        );
+      }
+
+      if (packet.event_type === "CHIP_STATUS_TELEMETRY") {
+        deviceRegistry = updateRegistryFromChipStatus(
+          deviceRegistry,
+          packet.payload,
+          packet.timestamp_utc
+        );
+      }
+
+      if (packet.event_type === "POWER_HEALTH_TELEMETRY") {
+        deviceRegistry = updateRegistryFromPowerHealth(
+          deviceRegistry,
+          packet.payload,
+          packet.timestamp_utc
+        );
+      }
+
       return {
         lastPacketAt: packet.timestamp_utc,
         packetCount: state.packetCount + 1,
@@ -92,6 +130,8 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           packet.event_type === "POWER_HEALTH_TELEMETRY"
             ? packet.payload
             : state.powerHealth,
+        deviceRegistry,
+        registrySummary: getRegistrySummary(deviceRegistry),
         logs: [log, ...state.logs].slice(0, 100),
       };
     }),
