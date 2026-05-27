@@ -126,13 +126,16 @@ async def telemetry_ws(websocket: WebSocket):
     sequence_number = 0
 
     while True:
-        sequence_number += 1
+        packets = []
 
-        packets = [
-            build_health_packet(sequence_number),
-            build_chip_packet(sequence_number),
-            build_power_packet(sequence_number),
-        ]
+        sequence_number += 1
+        packets.append(build_health_packet(sequence_number))
+
+        sequence_number += 1
+        packets.append(build_chip_packet(sequence_number))
+
+        sequence_number += 1
+        packets.append(build_power_packet(sequence_number))
 
         for packet in packets:
             await websocket.send_json(packet)
