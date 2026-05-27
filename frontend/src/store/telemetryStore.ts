@@ -22,6 +22,8 @@ type TelemetryState = {
   connectionState: ConnectionState;
   lastPacketAt: string | null;
   packetCount: number;
+  packetRateHz: number;
+  packetWindow: number[];
   lastSequenceNumber: number | null;
   missedPackets: number;
   systemHealth: SystemHealthPayload | null;
@@ -61,6 +63,8 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   connectionState: "OFFLINE",
   lastPacketAt: null,
   packetCount: 0,
+  packetRateHz: 0,
+  packetWindow: [],
   lastSequenceNumber: null,
   missedPackets: 0,
   systemHealth: null,
@@ -96,13 +100,19 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       packetCount: 0,
       lastSequenceNumber: null,
       missedPackets: 0,
+      packetRateHz: 0,
+      packetWindow: [],
       logs: [],
     }),
 
   ingestPacket: (packet) =>
     set((state) => {
+      const sequenceResetDetected =
+        state.lastSequenceNumber !== null &&
+        packet.sequence_number <= state.lastSequenceNumber;
+
       const expectedNext =
-        state.lastSequenceNumber === null
+        state.lastSequenceNumber === null || sequenceResetDetected
           ? packet.sequence_number
           : state.lastSequenceNumber + 1;
 
@@ -146,11 +156,22 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         );
       }
 
+      const now = Date.now();
+      const packetWindow = [...state.packetWindow, now].filter(
+        (timestamp) => now - timestamp <= 5000
+      );
+
+      const packetRateHz = packetWindow.length / 5;
+
       return {
         lastPacketAt: packet.timestamp_utc,
         packetCount: state.packetCount + 1,
+        packetWindow,
+        packetRateHz,
         lastSequenceNumber: packet.sequence_number,
-        missedPackets: state.missedPackets + missed,
+        missedPackets: sequenceResetDetected
+          ? state.missedPackets
+          : state.missedPackets + missed,
         systemHealth:
           packet.event_type === "SYSTEM_HEALTH_TELEMETRY"
             ? packet.payload
