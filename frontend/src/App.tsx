@@ -36,10 +36,10 @@ export default function App() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold tracking-widest text-cyan-300">
-                NOVA SC / PHASE 5.0A
+                NOVA SC / PHASE 5.0B
               </h1>
               <p className="text-xs uppercase tracking-widest text-slate-500">
-                Telemetry Infrastructure Hardening
+                Telemetry Integrity Supervision
               </p>
             </div>
 

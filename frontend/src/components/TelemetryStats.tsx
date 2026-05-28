@@ -7,13 +7,21 @@ export function TelemetryStats() {
   const missedPackets = useTelemetryStore((s) => s.missedPackets);
   const lastPacketAt = useTelemetryStore((s) => s.lastPacketAt);
   const registrySummary = useTelemetryStore((s) => s.registrySummary);
+  const duplicatePackets = useTelemetryStore((s) => s.duplicatePackets);
+  const outOfOrderPackets = useTelemetryStore((s) => s.outOfOrderPackets);
+  const sequenceResets = useTelemetryStore((s) => s.sequenceResets);
+  const sequenceGaps = useTelemetryStore((s) => s.sequenceGaps);
 
   return (
-    <section className="grid grid-cols-7 gap-3">
+    <section className="grid grid-cols-4 gap-3 xl:grid-cols-7">
       <Metric label="Packet Count" value={packetCount.toString()} />
       <Metric label="Packet Rate" value={`${packetRateHz.toFixed(2)} Hz`} />
       <Metric label="Last Sequence" value={lastSequenceNumber?.toString() ?? "N/A"} />
       <Metric label="Missed Packets" value={missedPackets.toString()} />
+      <Metric label="Duplicate Packets" value={duplicatePackets.toString()} />
+      <Metric label="Out-of-Order" value={outOfOrderPackets.toString()} />
+      <Metric label="Sequence Resets" value={sequenceResets.toString()} />
+      <Metric label="Sequence Gaps" value={sequenceGaps.toString()} />
       <Metric label="Last Packet UTC" value={lastPacketAt ?? "NO PACKET"} />
       <Metric label="Healthy Devices" value={registrySummary.healthy.toString()} />
       <Metric label="Offline Devices" value={registrySummary.offline.toString()} />

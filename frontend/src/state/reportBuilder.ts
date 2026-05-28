@@ -25,6 +25,10 @@ export type NovaScValidationReport = {
     packet_rate_hz: number;
     last_sequence_number: number | null;
     missed_packets: number;
+    duplicate_packets: number;
+    out_of_order_packets: number;
+    sequence_resets: number;
+    sequence_gaps: number;
     last_packet_at_utc: string | null;
   };
   health_check: {
@@ -44,6 +48,10 @@ export function buildNovaScValidationReport(params: {
   packetRateHz: number;
   lastSequenceNumber: number | null;
   missedPackets: number;
+  duplicatePackets: number;
+  outOfOrderPackets: number;
+  sequenceResets: number;
+  sequenceGaps: number;
   lastPacketAt: string | null;
   logs: EngineeringLog[];
 }): NovaScValidationReport {
@@ -69,6 +77,10 @@ export function buildNovaScValidationReport(params: {
       packet_rate_hz: Number(params.packetRateHz.toFixed(2)),
       last_sequence_number: params.lastSequenceNumber,
       missed_packets: params.missedPackets,
+      duplicate_packets: params.duplicatePackets,
+      out_of_order_packets: params.outOfOrderPackets,
+      sequence_resets: params.sequenceResets,
+      sequence_gaps: params.sequenceGaps,
       last_packet_at_utc: params.lastPacketAt,
     },
     health_check: healthCheck,

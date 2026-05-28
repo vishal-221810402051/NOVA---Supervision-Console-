@@ -13,6 +13,10 @@ export function ReportExportPanel() {
   const packetRateHz = useTelemetryStore((s) => s.packetRateHz);
   const lastSequenceNumber = useTelemetryStore((s) => s.lastSequenceNumber);
   const missedPackets = useTelemetryStore((s) => s.missedPackets);
+  const duplicatePackets = useTelemetryStore((s) => s.duplicatePackets);
+  const outOfOrderPackets = useTelemetryStore((s) => s.outOfOrderPackets);
+  const sequenceResets = useTelemetryStore((s) => s.sequenceResets);
+  const sequenceGaps = useTelemetryStore((s) => s.sequenceGaps);
   const lastPacketAt = useTelemetryStore((s) => s.lastPacketAt);
   const logs = useTelemetryStore((s) => s.logs);
 
@@ -26,6 +30,10 @@ export function ReportExportPanel() {
       packetRateHz,
       lastSequenceNumber,
       missedPackets,
+      duplicatePackets,
+      outOfOrderPackets,
+      sequenceResets,
+      sequenceGaps,
       lastPacketAt,
       logs,
     });

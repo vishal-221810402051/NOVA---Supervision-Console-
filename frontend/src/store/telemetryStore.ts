@@ -25,7 +25,13 @@ type TelemetryState = {
   packetRateHz: number;
   packetWindow: number[];
   lastSequenceNumber: number | null;
+  lastAcceptedSequenceNumber: number | null;
   missedPackets: number;
+  duplicatePackets: number;
+  outOfOrderPackets: number;
+  sequenceResets: number;
+  sequenceGaps: number;
+  recentPacketKeys: string[];
   systemHealth: SystemHealthPayload | null;
   chipStatus: ChipStatusPayload | null;
   powerHealth: PowerHealthPayload | null;
@@ -66,7 +72,13 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   packetRateHz: 0,
   packetWindow: [],
   lastSequenceNumber: null,
+  lastAcceptedSequenceNumber: null,
   missedPackets: 0,
+  duplicatePackets: 0,
+  outOfOrderPackets: 0,
+  sequenceResets: 0,
+  sequenceGaps: 0,
+  recentPacketKeys: [],
   systemHealth: null,
   chipStatus: null,
   powerHealth: null,
@@ -99,36 +111,79 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     set({
       packetCount: 0,
       lastSequenceNumber: null,
+      lastAcceptedSequenceNumber: null,
       missedPackets: 0,
+      duplicatePackets: 0,
+      outOfOrderPackets: 0,
+      sequenceResets: 0,
+      sequenceGaps: 0,
       packetRateHz: 0,
       packetWindow: [],
+      recentPacketKeys: [],
       logs: [],
     }),
 
   ingestPacket: (packet) =>
     set((state) => {
+      const now = Date.now();
+      const packetWindow = [...state.packetWindow, now].filter(
+        (timestamp) => now - timestamp <= 5000
+      );
+
+      const packetRateHz = packetWindow.length / 5;
+      const packetKey = getPacketKey(packet);
+      const duplicateDetected = state.recentPacketKeys.includes(packetKey);
       const sequenceResetDetected =
-        state.lastSequenceNumber !== null &&
-        packet.sequence_number <= state.lastSequenceNumber;
+        state.lastAcceptedSequenceNumber !== null &&
+        packet.sequence_number <= 5 &&
+        state.lastAcceptedSequenceNumber > 20;
+      const outOfOrderDetected =
+        !sequenceResetDetected &&
+        state.lastAcceptedSequenceNumber !== null &&
+        packet.sequence_number < state.lastAcceptedSequenceNumber;
+
+      const baseObservedUpdate = {
+        packetCount: state.packetCount + 1,
+        packetWindow,
+        packetRateHz,
+        lastSequenceNumber: packet.sequence_number,
+      };
+
+      if (duplicateDetected) {
+        return {
+          ...baseObservedUpdate,
+          duplicatePackets: state.duplicatePackets + 1,
+          logs: [
+            buildAnomalyLog(packet, "WARNING", `DUPLICATE_PACKET_IGNORED key=${packetKey}`),
+            ...state.logs,
+          ].slice(0, 100),
+        };
+      }
+
+      if (outOfOrderDetected) {
+        return {
+          ...baseObservedUpdate,
+          outOfOrderPackets: state.outOfOrderPackets + 1,
+          logs: [
+            buildAnomalyLog(
+              packet,
+              "ERROR",
+              `OUT_OF_ORDER_PACKET_IGNORED seq=${packet.sequence_number} accepted=${state.lastAcceptedSequenceNumber}`
+            ),
+            ...state.logs,
+          ].slice(0, 100),
+        };
+      }
 
       const expectedNext =
-        state.lastSequenceNumber === null || sequenceResetDetected
+        state.lastAcceptedSequenceNumber === null || sequenceResetDetected
           ? packet.sequence_number
-          : state.lastSequenceNumber + 1;
+          : state.lastAcceptedSequenceNumber + 1;
 
-      const missed =
+      const gap =
         packet.sequence_number > expectedNext
           ? packet.sequence_number - expectedNext
           : 0;
-
-      const log: EngineeringLog = {
-        timestamp_utc: packet.timestamp_utc,
-        node_id: packet.node_id,
-        event_type: packet.event_type,
-        sequence_number: packet.sequence_number,
-        severity: getSeverity(packet),
-        message: `${packet.event_type} received from ${packet.node_id}`,
-      };
 
       let deviceRegistry = state.deviceRegistry;
 
@@ -156,22 +211,53 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         );
       }
 
-      const now = Date.now();
-      const packetWindow = [...state.packetWindow, now].filter(
-        (timestamp) => now - timestamp <= 5000
-      );
+      const normalLog: EngineeringLog = {
+        timestamp_utc: packet.timestamp_utc,
+        node_id: packet.node_id,
+        event_type: packet.event_type,
+        sequence_number: packet.sequence_number,
+        severity: getSeverity(packet),
+        message: `${packet.event_type} received from ${packet.node_id}`,
+      };
 
-      const packetRateHz = packetWindow.length / 5;
+      const anomalyLogs: EngineeringLog[] = [];
+
+      if (sequenceResetDetected) {
+        anomalyLogs.push(
+          buildAnomalyLog(
+            packet,
+            "WARNING",
+            `SEQUENCE_RESET_DETECTED accepted=${state.lastAcceptedSequenceNumber} new=${packet.sequence_number}`
+          )
+        );
+      }
+
+      if (gap > 0) {
+        anomalyLogs.push(
+          buildAnomalyLog(
+            packet,
+            "WARNING",
+            `SEQUENCE_GAP_DETECTED gap=${gap} expected=${expectedNext} received=${packet.sequence_number}`
+          )
+        );
+      }
+
+      const recentPacketKeys = sequenceResetDetected
+        ? [packetKey]
+        : [...state.recentPacketKeys, packetKey].slice(-300);
 
       return {
+        ...baseObservedUpdate,
         lastPacketAt: packet.timestamp_utc,
-        packetCount: state.packetCount + 1,
-        packetWindow,
-        packetRateHz,
-        lastSequenceNumber: packet.sequence_number,
-        missedPackets: sequenceResetDetected
-          ? state.missedPackets
-          : state.missedPackets + missed,
+        lastAcceptedSequenceNumber: packet.sequence_number,
+        missedPackets: state.missedPackets + gap,
+        duplicatePackets: state.duplicatePackets,
+        outOfOrderPackets: state.outOfOrderPackets,
+        sequenceResets: sequenceResetDetected
+          ? state.sequenceResets + 1
+          : state.sequenceResets,
+        sequenceGaps: state.sequenceGaps + gap,
+        recentPacketKeys,
         systemHealth:
           packet.event_type === "SYSTEM_HEALTH_TELEMETRY"
             ? packet.payload
@@ -188,7 +274,26 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         registrySummary: getRegistrySummary(deviceRegistry),
         globalHealth: getGlobalSystemHealth(deviceRegistry),
         isTelemetryStale: false,
-        logs: [log, ...state.logs].slice(0, 100),
+        logs: [...anomalyLogs, normalLog, ...state.logs].slice(0, 100),
       };
     }),
 }));
+
+function getPacketKey(packet: TelemetryPacket) {
+  return `${packet.run_id}:${packet.node_id}:${packet.event_type}:${packet.sequence_number}`;
+}
+
+function buildAnomalyLog(
+  packet: TelemetryPacket,
+  severity: EngineeringLog["severity"],
+  message: string
+): EngineeringLog {
+  return {
+    timestamp_utc: packet.timestamp_utc,
+    node_id: packet.node_id,
+    event_type: packet.event_type,
+    sequence_number: packet.sequence_number,
+    severity,
+    message,
+  };
+}
