@@ -296,9 +296,34 @@ export type DeviceRegistryEntry = {
 
 export type HealthCheckResult = "PASS" | "FAIL" | "WARNING";
 
+export type HealthCheckCategory =
+  | "TOPOLOGY"
+  | "GATEWAY"
+  | "LINK"
+  | "NODE"
+  | "STREAM"
+  | "INTEGRITY"
+  | "CHIP"
+  | "POWER"
+  | "EXPECTED_WARNING"
+  | "LEGACY";
+
+export type HealthCheckSeverity =
+  | "INFO"
+  | "WARNING"
+  | "ERROR"
+  | "CRITICAL";
+
 export type HealthCheckRule = {
   rule_id: string;
   label: string;
   result: HealthCheckResult;
   details: string;
+  category?: HealthCheckCategory;
+  severity?: HealthCheckSeverity;
+  evidence?: {
+    source: string;
+    timestamp_utc?: string | null;
+    value?: string | number | boolean | null;
+  };
 };
