@@ -14,6 +14,7 @@ import {
   getGlobalSystemHealth,
   getRegistrySummary,
   updateRegistryFromChipStatus,
+  updateRegistryFromNodeHealth,
   updateRegistryFromPowerHealth,
   updateRegistryFromSystemHealth,
   type DeviceRegistry,
@@ -265,6 +266,14 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
 
       if (packet.event_type === "POWER_HEALTH_TELEMETRY") {
         deviceRegistry = updateRegistryFromPowerHealth(
+          deviceRegistry,
+          packet.payload,
+          packet.timestamp_utc
+        );
+      }
+
+      if (packet.event_type === "NODE_HEALTH_TELEMETRY") {
+        deviceRegistry = updateRegistryFromNodeHealth(
           deviceRegistry,
           packet.payload,
           packet.timestamp_utc

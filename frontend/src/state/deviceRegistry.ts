@@ -2,11 +2,14 @@ import type {
   ChipStatusPayload,
   DeviceRegistryEntry,
   HealthState,
+  NodeHealthPayload,
   PowerHealthPayload,
   SystemHealthPayload,
 } from "../types/telemetry";
 
 export const DEVICE_IDS = {
+  LAPTOP_CONSOLE: "laptop_console",
+  PI_GATEWAY: "pi_gateway",
   MAIN_MCU: "main_mcu",
   SUB_MCU: "sub_mcu",
   WIFI_LINK: "wifi_link",
@@ -26,6 +29,16 @@ export type DeviceRegistry = Record<string, DeviceRegistryEntry>;
 
 export function createInitialDeviceRegistry(): DeviceRegistry {
   return {
+    [DEVICE_IDS.LAPTOP_CONSOLE]: nodeDevice(
+      DEVICE_IDS.LAPTOP_CONSOLE,
+      "Laptop Console",
+      "laptop_console"
+    ),
+    [DEVICE_IDS.PI_GATEWAY]: nodeDevice(
+      DEVICE_IDS.PI_GATEWAY,
+      "Pi Gateway",
+      "pi_gateway"
+    ),
     [DEVICE_IDS.MAIN_MCU]: nodeDevice(DEVICE_IDS.MAIN_MCU, "MAIN ESP32-S3", "esp32_motion"),
     [DEVICE_IDS.SUB_MCU]: nodeDevice(DEVICE_IDS.SUB_MCU, "SUB ESP32-S3", "esp32_qc"),
     [DEVICE_IDS.WIFI_LINK]: linkDevice(DEVICE_IDS.WIFI_LINK, "WiFi Link", "WIFI"),
@@ -225,6 +238,25 @@ export function updateRegistryFromPowerHealth(
   return next;
 }
 
+export function updateRegistryFromNodeHealth(
+  registry: DeviceRegistry,
+  payload: NodeHealthPayload,
+  timestamp_utc: string
+): DeviceRegistry {
+  const id = mapNodeIdToDeviceId(payload.node_id);
+  if (!id || !registry[id]) return registry;
+
+  return {
+    ...registry,
+    [id]: updateEntry(registry[id], {
+      health_state: payload.health_state,
+      online: payload.health_state !== "OFFLINE",
+      last_seen_utc: timestamp_utc,
+      status_message: payload.status_message,
+    }),
+  };
+}
+
 function updateEntry(
   entry: DeviceRegistryEntry,
   updates: Partial<DeviceRegistryEntry>
@@ -247,6 +279,17 @@ function mapChipNameToDeviceId(name: string): string | null {
   };
 
   return map[name] ?? null;
+}
+
+function mapNodeIdToDeviceId(nodeId: string): string | null {
+  const map: Record<string, string> = {
+    laptop_console: DEVICE_IDS.LAPTOP_CONSOLE,
+    pi_gateway: DEVICE_IDS.PI_GATEWAY,
+    esp32_motion: DEVICE_IDS.MAIN_MCU,
+    esp32_qc: DEVICE_IDS.SUB_MCU,
+  };
+
+  return map[nodeId] ?? null;
 }
 
 export function getRegistrySummary(registry: DeviceRegistry) {

@@ -1,4 +1,5 @@
 import { useTelemetryStore } from "../store/telemetryStore";
+import type { DeviceRegistryEntry } from "../types/telemetry";
 
 const nodeLabels: Record<string, string> = {
   laptop_console: "Laptop Console",
@@ -9,8 +10,13 @@ const nodeLabels: Record<string, string> = {
 
 export function TopologyView() {
   const linkRegistry = useTelemetryStore((s) => s.linkRegistry);
+  const deviceRegistry = useTelemetryStore((s) => s.deviceRegistry);
   const gatewayHealth = useTelemetryStore((s) => s.gatewayHealth);
   const links = Object.values(linkRegistry);
+  const getNode = (nodeId: string) =>
+    Object.values(deviceRegistry).find(
+      (device) => device.node_id === nodeId || device.device_id === nodeId
+    );
 
   return (
     <section className="grid gap-4">
@@ -20,13 +26,13 @@ export function TopologyView() {
         </h2>
 
         <div className="grid gap-3">
-          <NodeCard nodeId="laptop_console" />
+          <NodeCard nodeId="laptop_console" device={getNode("laptop_console")} />
           <LinkRow link={linkRegistry.link_laptop_pi} />
-          <NodeCard nodeId="pi_gateway" />
+          <NodeCard nodeId="pi_gateway" device={getNode("pi_gateway")} />
           <LinkRow link={linkRegistry.link_pi_main} />
-          <NodeCard nodeId="esp32_motion" />
+          <NodeCard nodeId="esp32_motion" device={getNode("esp32_motion")} />
           <LinkRow link={linkRegistry.link_main_sub} />
-          <NodeCard nodeId="esp32_qc" />
+          <NodeCard nodeId="esp32_qc" device={getNode("esp32_qc")} />
         </div>
       </div>
 
@@ -88,16 +94,38 @@ export function TopologyView() {
   );
 }
 
-function NodeCard({ nodeId }: { nodeId: string }) {
+function NodeCard({
+  nodeId,
+  device,
+}: {
+  nodeId: string;
+  device: DeviceRegistryEntry | undefined;
+}) {
   return (
     <div className="border border-slate-800 bg-black p-3">
       <div className="text-[10px] uppercase tracking-widest text-slate-500">
         Node
       </div>
-      <div className="font-mono text-sm font-bold text-cyan-100">
-        {nodeLabels[nodeId] ?? nodeId}
+      <div className="grid grid-cols-4 items-center gap-3">
+        <div>
+          <div className="font-mono text-sm font-bold text-cyan-100">
+            {nodeLabels[nodeId] ?? nodeId}
+          </div>
+          <div className="font-mono text-xs text-slate-500">{nodeId}</div>
+        </div>
+        <div className={stateClass(device?.health_state ?? "OFFLINE")}>
+          {device?.health_state ?? "OFFLINE"}
+        </div>
+        <div className="font-mono text-xs text-slate-400">
+          age=
+          {device?.heartbeat_age_ms === null || device?.heartbeat_age_ms === undefined
+            ? "-"
+            : `${Math.round(device.heartbeat_age_ms)} ms`}
+        </div>
+        <div className="text-xs text-slate-400">
+          {device?.status_message ?? "Awaiting node health"}
+        </div>
       </div>
-      <div className="font-mono text-xs text-slate-500">{nodeId}</div>
     </div>
   );
 }
@@ -155,5 +183,12 @@ function linkStateClass(state: string) {
 function syncStateClass(state: string) {
   if (state === "SYNCED") return "font-bold text-emerald-300";
   if (state === "DESYNCED") return "font-bold text-red-300";
+  return "font-bold text-slate-500";
+}
+
+function stateClass(state: string) {
+  if (state === "HEALTHY") return "font-bold text-emerald-300";
+  if (state === "DEGRADED") return "font-bold text-amber-300";
+  if (state === "FAIL_SAFE") return "font-bold text-red-400";
   return "font-bold text-slate-500";
 }
