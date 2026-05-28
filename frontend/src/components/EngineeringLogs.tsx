@@ -24,13 +24,20 @@ export function EngineeringLogs() {
             >
               {log.severity}
             </span>{" "}
-            <span className="text-cyan-300">{log.node_id}</span>{" "}
+            <span className="text-slate-500">{shortStreamId(log.stream_id)}</span>{" "}
+            <span className="text-cyan-300">{log.source_node_id ?? log.node_id}</span>{" "}
             <span className="text-amber-300">{log.event_type}</span>{" "}
-            <span className="text-slate-400">seq={log.sequence_number}</span>
+            <span className="text-slate-400">gseq={log.global_sequence_number ?? log.sequence_number}</span>{" "}
+            <span className="text-slate-400">sseq={log.source_sequence_number ?? "N/A"}</span>
             <span className="text-slate-500"> {log.message}</span>
           </div>
         ))}
       </div>
     </section>
   );
+}
+
+function shortStreamId(streamId: string | undefined) {
+  if (!streamId) return "stream=N/A";
+  return `stream=${streamId.length > 16 ? `${streamId.slice(0, 16)}...` : streamId}`;
 }

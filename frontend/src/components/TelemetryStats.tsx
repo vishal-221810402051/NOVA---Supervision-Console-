@@ -11,9 +11,13 @@ export function TelemetryStats() {
   const outOfOrderPackets = useTelemetryStore((s) => s.outOfOrderPackets);
   const sequenceResets = useTelemetryStore((s) => s.sequenceResets);
   const sequenceGaps = useTelemetryStore((s) => s.sequenceGaps);
+  const activeStreamId = useTelemetryStore((s) => s.activeStreamId);
+  const streamSwitches = useTelemetryStore((s) => s.streamSwitches);
 
   return (
     <section className="grid grid-cols-4 gap-3 xl:grid-cols-7">
+      <Metric label="Active Stream" value={shortStreamId(activeStreamId)} />
+      <Metric label="Stream Switches" value={streamSwitches.toString()} />
       <Metric label="Packet Count" value={packetCount.toString()} />
       <Metric label="Packet Rate" value={`${packetRateHz.toFixed(2)} Hz`} />
       <Metric label="Last Sequence" value={lastSequenceNumber?.toString() ?? "N/A"} />
@@ -27,6 +31,11 @@ export function TelemetryStats() {
       <Metric label="Offline Devices" value={registrySummary.offline.toString()} />
     </section>
   );
+}
+
+function shortStreamId(streamId: string | null) {
+  if (!streamId) return "N/A";
+  return streamId.length > 18 ? `${streamId.slice(0, 18)}...` : streamId;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

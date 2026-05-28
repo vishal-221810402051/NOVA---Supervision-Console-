@@ -26,6 +26,9 @@ type TelemetryState = {
   packetWindow: number[];
   lastSequenceNumber: number | null;
   lastAcceptedSequenceNumber: number | null;
+  activeStreamId: string | null;
+  streamSwitches: number;
+  sourceSequences: Record<string, number>;
   missedPackets: number;
   duplicatePackets: number;
   outOfOrderPackets: number;
@@ -45,6 +48,7 @@ type TelemetryState = {
   ingestPacket: (packet: TelemetryPacket) => void;
   ageRegistry: () => void;
   resetPacketStats: () => void;
+  resetConnectionStats: () => void;
 };
 
 function getSeverity(packet: TelemetryPacket): EngineeringLog["severity"] {
@@ -73,6 +77,9 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   packetWindow: [],
   lastSequenceNumber: null,
   lastAcceptedSequenceNumber: null,
+  activeStreamId: null,
+  streamSwitches: 0,
+  sourceSequences: {},
   missedPackets: 0,
   duplicatePackets: 0,
   outOfOrderPackets: 0,
@@ -112,6 +119,9 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       packetCount: 0,
       lastSequenceNumber: null,
       lastAcceptedSequenceNumber: null,
+      activeStreamId: null,
+      streamSwitches: 0,
+      sourceSequences: {},
       missedPackets: 0,
       duplicatePackets: 0,
       outOfOrderPackets: 0,
@@ -123,6 +133,19 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       logs: [],
     }),
 
+  resetConnectionStats: () =>
+    set({
+      packetCount: 0,
+      lastSequenceNumber: null,
+      missedPackets: 0,
+      duplicatePackets: 0,
+      outOfOrderPackets: 0,
+      sequenceGaps: 0,
+      packetRateHz: 0,
+      packetWindow: [],
+      logs: [],
+    }),
+
   ingestPacket: (packet) =>
     set((state) => {
       const now = Date.now();
@@ -131,22 +154,44 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       );
 
       const packetRateHz = packetWindow.length / 5;
+      const globalSequenceNumber = getGlobalSequenceNumber(packet);
       const packetKey = getPacketKey(packet);
-      const duplicateDetected = state.recentPacketKeys.includes(packetKey);
+      const streamSwitchDetected =
+        state.activeStreamId !== null && packet.stream_id !== state.activeStreamId;
+      const activeStreamId = packet.stream_id;
+      const recentKeysForStream = streamSwitchDetected ? [] : state.recentPacketKeys;
+      const duplicateDetected = recentKeysForStream.includes(packetKey);
       const sequenceResetDetected =
+        !streamSwitchDetected &&
         state.lastAcceptedSequenceNumber !== null &&
-        packet.sequence_number <= 5 &&
+        globalSequenceNumber <= 5 &&
         state.lastAcceptedSequenceNumber > 20;
       const outOfOrderDetected =
+        !streamSwitchDetected &&
         !sequenceResetDetected &&
         state.lastAcceptedSequenceNumber !== null &&
-        packet.sequence_number < state.lastAcceptedSequenceNumber;
+        globalSequenceNumber < state.lastAcceptedSequenceNumber;
+      const sourceSequenceKey = `${packet.stream_id}:${packet.source_node_id}`;
+      const previousSourceSequence = streamSwitchDetected
+        ? undefined
+        : state.sourceSequences[sourceSequenceKey];
+      const sourceSequenceResetDetected =
+        previousSourceSequence !== undefined &&
+        packet.source_sequence_number < previousSourceSequence;
+      const sourceSequences = {
+        ...(streamSwitchDetected ? {} : state.sourceSequences),
+        [sourceSequenceKey]: packet.source_sequence_number,
+      };
 
       const baseObservedUpdate = {
         packetCount: state.packetCount + 1,
         packetWindow,
         packetRateHz,
-        lastSequenceNumber: packet.sequence_number,
+        lastSequenceNumber: globalSequenceNumber,
+        activeStreamId,
+        streamSwitches: streamSwitchDetected
+          ? state.streamSwitches + 1
+          : state.streamSwitches,
       };
 
       if (duplicateDetected) {
@@ -176,13 +221,13 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       }
 
       const expectedNext =
-        state.lastAcceptedSequenceNumber === null || sequenceResetDetected
-          ? packet.sequence_number
+        state.lastAcceptedSequenceNumber === null || sequenceResetDetected || streamSwitchDetected
+          ? globalSequenceNumber
           : state.lastAcceptedSequenceNumber + 1;
 
       const gap =
-        packet.sequence_number > expectedNext
-          ? packet.sequence_number - expectedNext
+        globalSequenceNumber > expectedNext
+          ? globalSequenceNumber - expectedNext
           : 0;
 
       let deviceRegistry = state.deviceRegistry;
@@ -214,20 +259,44 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       const normalLog: EngineeringLog = {
         timestamp_utc: packet.timestamp_utc,
         node_id: packet.node_id,
+        source_node_id: packet.source_node_id,
         event_type: packet.event_type,
-        sequence_number: packet.sequence_number,
+        sequence_number: globalSequenceNumber,
+        global_sequence_number: globalSequenceNumber,
+        source_sequence_number: packet.source_sequence_number,
+        stream_id: packet.stream_id,
         severity: getSeverity(packet),
-        message: `${packet.event_type} received from ${packet.node_id}`,
+        message: `${packet.event_type} received from ${packet.source_node_id}`,
       };
 
       const anomalyLogs: EngineeringLog[] = [];
+
+      if (streamSwitchDetected) {
+        anomalyLogs.push(
+          buildAnomalyLog(
+            packet,
+            "WARNING",
+            `STREAM_SWITCH_DETECTED previous=${state.activeStreamId} new=${packet.stream_id}`
+          )
+        );
+      }
 
       if (sequenceResetDetected) {
         anomalyLogs.push(
           buildAnomalyLog(
             packet,
             "WARNING",
-            `SEQUENCE_RESET_DETECTED accepted=${state.lastAcceptedSequenceNumber} new=${packet.sequence_number}`
+            `SEQUENCE_RESET_DETECTED accepted=${state.lastAcceptedSequenceNumber} new=${globalSequenceNumber}`
+          )
+        );
+      }
+
+      if (sourceSequenceResetDetected) {
+        anomalyLogs.push(
+          buildAnomalyLog(
+            packet,
+            "WARNING",
+            `SOURCE_SEQUENCE_RESET_DETECTED source=${sourceSequenceKey} previous=${previousSourceSequence} new=${packet.source_sequence_number}`
           )
         );
       }
@@ -237,23 +306,24 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           buildAnomalyLog(
             packet,
             "WARNING",
-            `SEQUENCE_GAP_DETECTED gap=${gap} expected=${expectedNext} received=${packet.sequence_number}`
+            `SEQUENCE_GAP_DETECTED gap=${gap} expected=${expectedNext} received=${globalSequenceNumber}`
           )
         );
       }
 
-      const recentPacketKeys = sequenceResetDetected
+      const recentPacketKeys = sequenceResetDetected || streamSwitchDetected
         ? [packetKey]
-        : [...state.recentPacketKeys, packetKey].slice(-300);
+        : [...recentKeysForStream, packetKey].slice(-300);
 
       return {
         ...baseObservedUpdate,
         lastPacketAt: packet.timestamp_utc,
-        lastAcceptedSequenceNumber: packet.sequence_number,
+        lastAcceptedSequenceNumber: globalSequenceNumber,
+        sourceSequences,
         missedPackets: state.missedPackets + gap,
         duplicatePackets: state.duplicatePackets,
         outOfOrderPackets: state.outOfOrderPackets,
-        sequenceResets: sequenceResetDetected
+        sequenceResets: sequenceResetDetected || sourceSequenceResetDetected
           ? state.sequenceResets + 1
           : state.sequenceResets,
         sequenceGaps: state.sequenceGaps + gap,
@@ -280,7 +350,11 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
 }));
 
 function getPacketKey(packet: TelemetryPacket) {
-  return `${packet.run_id}:${packet.node_id}:${packet.event_type}:${packet.sequence_number}`;
+  return `${packet.stream_id}:${packet.source_node_id}:${packet.event_type}:${packet.source_sequence_number}:${getGlobalSequenceNumber(packet)}`;
+}
+
+function getGlobalSequenceNumber(packet: TelemetryPacket) {
+  return packet.global_sequence_number ?? packet.sequence_number;
 }
 
 function buildAnomalyLog(
@@ -291,8 +365,12 @@ function buildAnomalyLog(
   return {
     timestamp_utc: packet.timestamp_utc,
     node_id: packet.node_id,
+    source_node_id: packet.source_node_id,
     event_type: packet.event_type,
-    sequence_number: packet.sequence_number,
+    sequence_number: getGlobalSequenceNumber(packet),
+    global_sequence_number: getGlobalSequenceNumber(packet),
+    source_sequence_number: packet.source_sequence_number,
+    stream_id: packet.stream_id,
     severity,
     message,
   };

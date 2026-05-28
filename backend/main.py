@@ -15,25 +15,59 @@ app.add_middleware(
 )
 
 HEALTH_STATES = ["HEALTHY", "DEGRADED", "OFFLINE", "FAIL_SAFE"]
+STREAM_ID = "SIM_STREAM_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+GLOBAL_SEQUENCE_NUMBER = 0
+SOURCE_SEQUENCE_COUNTERS = {
+    "laptop_console": 0,
+    "esp32_motion": 0,
+    "esp32_qc": 0,
+}
 
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
 
 
-def build_health_packet(sequence_number: int):
+def next_source_sequence(source_node_id: str):
+    SOURCE_SEQUENCE_COUNTERS[source_node_id] = SOURCE_SEQUENCE_COUNTERS.get(source_node_id, 0) + 1
+    return SOURCE_SEQUENCE_COUNTERS[source_node_id]
+
+
+def next_global_sequence():
+    global GLOBAL_SEQUENCE_NUMBER
+    GLOBAL_SEQUENCE_NUMBER += 1
+    return GLOBAL_SEQUENCE_NUMBER
+
+
+def build_packet_metadata(global_sequence_number: int, source_node_id: str):
+    producer_timestamp_utc = utc_now()
+    supervisor_received_utc = utc_now()
+
     return {
         "schema_version": "v1.0",
-        "timestamp_utc": utc_now(),
-        "sequence_number": sequence_number,
-        "run_id": "NOVA_SC_PHASE_1",
-        "node_id": "laptop_console",
+        "stream_id": STREAM_ID,
+        "global_sequence_number": global_sequence_number,
+        "source_node_id": source_node_id,
+        "source_sequence_number": next_source_sequence(source_node_id),
+        "producer_timestamp_utc": producer_timestamp_utc,
+        "supervisor_received_utc": supervisor_received_utc,
+        "timestamp_utc": supervisor_received_utc,
+        "sequence_number": global_sequence_number,
+        "run_id": "NOVA_SC_PHASE_5_0C",
+        "node_id": source_node_id,
+    }
+
+
+def build_health_packet(global_sequence_number: int):
+    source_node_id = "laptop_console"
+    return {
+        **build_packet_metadata(global_sequence_number, source_node_id),
         "event_type": "SYSTEM_HEALTH_TELEMETRY",
         "payload": {
             "main_mcu": {
                 "node_id": "esp32_motion",
                 "health_state": "HEALTHY",
-                "uptime_ms": sequence_number * 1000,
+                "uptime_ms": global_sequence_number * 1000,
                 "firmware_version": "main-fw-sim-0.1.0",
                 "free_heap_bytes": random.randint(210000, 280000),
                 "reset_reason": "POWER_ON_RESET",
@@ -42,7 +76,7 @@ def build_health_packet(sequence_number: int):
             "sub_mcu": {
                 "node_id": "esp32_qc",
                 "health_state": "HEALTHY",
-                "uptime_ms": sequence_number * 1000,
+                "uptime_ms": global_sequence_number * 1000,
                 "firmware_version": "sub-fw-sim-0.1.0",
                 "free_heap_bytes": random.randint(210000, 280000),
                 "reset_reason": "POWER_ON_RESET",
@@ -55,8 +89,8 @@ def build_health_packet(sequence_number: int):
             },
             "main_sub_uart": {
                 "link_state": "ACTIVE",
-                "tx_packets": sequence_number,
-                "rx_packets": sequence_number,
+                "tx_packets": global_sequence_number,
+                "rx_packets": global_sequence_number,
                 "crc_errors": 0,
                 "dropped_packets": 0,
             },
@@ -64,13 +98,10 @@ def build_health_packet(sequence_number: int):
     }
 
 
-def build_chip_packet(sequence_number: int):
+def build_chip_packet(global_sequence_number: int):
+    source_node_id = "esp32_motion"
     return {
-        "schema_version": "v1.0",
-        "timestamp_utc": utc_now(),
-        "sequence_number": sequence_number,
-        "run_id": "NOVA_SC_PHASE_1",
-        "node_id": "esp32_motion",
+        **build_packet_metadata(global_sequence_number, source_node_id),
         "event_type": "CHIP_STATUS_TELEMETRY",
         "payload": {
             "i2c_devices": [
@@ -92,13 +123,10 @@ def build_chip_packet(sequence_number: int):
     }
 
 
-def build_power_packet(sequence_number: int):
+def build_power_packet(global_sequence_number: int):
+    source_node_id = "esp32_motion"
     return {
-        "schema_version": "v1.0",
-        "timestamp_utc": utc_now(),
-        "sequence_number": sequence_number,
-        "run_id": "NOVA_SC_PHASE_1",
-        "node_id": "esp32_motion",
+        **build_packet_metadata(global_sequence_number, source_node_id),
         "event_type": "POWER_HEALTH_TELEMETRY",
         "payload": {
             "vin_protected_v": 7.0,
@@ -117,25 +145,21 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"backend": "HEALTHY", "websocket": "/ws/telemetry"}
+    return {"backend": "HEALTHY", "websocket": "/ws/telemetry", "stream_id": STREAM_ID}
 
 
 @app.websocket("/ws/telemetry")
 async def telemetry_ws(websocket: WebSocket):
     await websocket.accept()
-    sequence_number = 0
 
     while True:
         packets = []
 
-        sequence_number += 1
-        packets.append(build_health_packet(sequence_number))
+        packets.append(build_health_packet(next_global_sequence()))
 
-        sequence_number += 1
-        packets.append(build_chip_packet(sequence_number))
+        packets.append(build_chip_packet(next_global_sequence()))
 
-        sequence_number += 1
-        packets.append(build_power_packet(sequence_number))
+        packets.append(build_power_packet(next_global_sequence()))
 
         for packet in packets:
             await websocket.send_json(packet)

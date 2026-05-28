@@ -9,6 +9,9 @@ export function ReportExportPanel() {
   const globalHealth = useTelemetryStore((s) => s.globalHealth);
   const connectionState = useTelemetryStore((s) => s.connectionState);
   const isTelemetryStale = useTelemetryStore((s) => s.isTelemetryStale);
+  const activeStreamId = useTelemetryStore((s) => s.activeStreamId);
+  const streamSwitches = useTelemetryStore((s) => s.streamSwitches);
+  const sourceSequences = useTelemetryStore((s) => s.sourceSequences);
   const packetCount = useTelemetryStore((s) => s.packetCount);
   const packetRateHz = useTelemetryStore((s) => s.packetRateHz);
   const lastSequenceNumber = useTelemetryStore((s) => s.lastSequenceNumber);
@@ -26,6 +29,9 @@ export function ReportExportPanel() {
       globalHealth,
       connectionState,
       isTelemetryStale,
+      activeStreamId,
+      streamSwitches,
+      sourceSequences,
       packetCount,
       packetRateHz,
       lastSequenceNumber,

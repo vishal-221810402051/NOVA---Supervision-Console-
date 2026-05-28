@@ -14,13 +14,16 @@ export type NovaScValidationReport = {
   generated_at_utc: string;
   project: {
     name: "NOVA SC";
-    phase: "PHASE_4_6";
-    scope: "V1_HEALTH_CHECK_AND_CHIP_STATUS";
+    phase: "PHASE_5_0C";
+    scope: "MULTI_DOMAIN_TELEMETRY_METADATA";
   };
   system_status: {
     global_health: HealthState;
     connection_state: ConnectionState;
     telemetry_stale: boolean;
+    active_stream_id: string | null;
+    stream_switches: number;
+    source_sequences: Record<string, number>;
     packet_count: number;
     packet_rate_hz: number;
     last_sequence_number: number | null;
@@ -44,6 +47,9 @@ export function buildNovaScValidationReport(params: {
   globalHealth: HealthState;
   connectionState: ConnectionState;
   isTelemetryStale: boolean;
+  activeStreamId: string | null;
+  streamSwitches: number;
+  sourceSequences: Record<string, number>;
   packetCount: number;
   packetRateHz: number;
   lastSequenceNumber: number | null;
@@ -66,13 +72,16 @@ export function buildNovaScValidationReport(params: {
     generated_at_utc: new Date().toISOString(),
     project: {
       name: "NOVA SC",
-      phase: "PHASE_4_6",
-      scope: "V1_HEALTH_CHECK_AND_CHIP_STATUS",
+      phase: "PHASE_5_0C",
+      scope: "MULTI_DOMAIN_TELEMETRY_METADATA",
     },
     system_status: {
       global_health: params.globalHealth,
       connection_state: params.connectionState,
       telemetry_stale: params.isTelemetryStale,
+      active_stream_id: params.activeStreamId,
+      stream_switches: params.streamSwitches,
+      source_sequences: params.sourceSequences,
       packet_count: params.packetCount,
       packet_rate_hz: Number(params.packetRateHz.toFixed(2)),
       last_sequence_number: params.lastSequenceNumber,

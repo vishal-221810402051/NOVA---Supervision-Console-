@@ -18,6 +18,12 @@ function isValidTelemetryPacket(packet: unknown): packet is TelemetryPacket {
 
   return (
     p.schema_version === "v1.0" &&
+    typeof p.stream_id === "string" &&
+    typeof p.global_sequence_number === "number" &&
+    typeof p.source_node_id === "string" &&
+    typeof p.source_sequence_number === "number" &&
+    typeof p.producer_timestamp_utc === "string" &&
+    typeof p.supervisor_received_utc === "string" &&
     typeof p.timestamp_utc === "string" &&
     typeof p.sequence_number === "number" &&
     typeof p.node_id === "string" &&
@@ -78,7 +84,7 @@ function connectTelemetrySocket(sessionId: number) {
   socket.onopen = () => {
     if (sessionId !== activeSessionId || socket !== activeSocket) return;
 
-    useTelemetryStore.getState().resetPacketStats();
+    useTelemetryStore.getState().resetConnectionStats();
     useTelemetryStore.getState().setConnectionState("CONNECTED");
   };
 

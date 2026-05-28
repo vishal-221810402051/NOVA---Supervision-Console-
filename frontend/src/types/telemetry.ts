@@ -74,6 +74,12 @@ export type PowerHealthPayload = {
 export type TelemetryPacket =
   | {
       schema_version: string;
+      stream_id: string;
+      global_sequence_number: number;
+      source_node_id: string;
+      source_sequence_number: number;
+      producer_timestamp_utc: string;
+      supervisor_received_utc: string;
       timestamp_utc: string;
       sequence_number: number;
       run_id: string;
@@ -83,6 +89,12 @@ export type TelemetryPacket =
     }
   | {
       schema_version: string;
+      stream_id: string;
+      global_sequence_number: number;
+      source_node_id: string;
+      source_sequence_number: number;
+      producer_timestamp_utc: string;
+      supervisor_received_utc: string;
       timestamp_utc: string;
       sequence_number: number;
       run_id: string;
@@ -92,6 +104,12 @@ export type TelemetryPacket =
     }
   | {
       schema_version: string;
+      stream_id: string;
+      global_sequence_number: number;
+      source_node_id: string;
+      source_sequence_number: number;
+      producer_timestamp_utc: string;
+      supervisor_received_utc: string;
       timestamp_utc: string;
       sequence_number: number;
       run_id: string;
@@ -103,8 +121,12 @@ export type TelemetryPacket =
 export type EngineeringLog = {
   timestamp_utc: string;
   node_id: string;
+  source_node_id?: string;
   event_type: EventType;
   sequence_number: number;
+  global_sequence_number?: number;
+  source_sequence_number?: number;
+  stream_id?: string;
   severity: LogSeverity;
   message: string;
 };
