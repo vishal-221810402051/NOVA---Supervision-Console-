@@ -27,9 +27,14 @@ import {
   updateLinkRegistryFromSync,
   type LinkRegistry,
 } from "../state/linkRegistry";
+import {
+  SIMULATOR_WEBSOCKET_SOURCE,
+  type TelemetrySourceStatus,
+} from "../transport/telemetrySource";
 
 type TelemetryState = {
   connectionState: ConnectionState;
+  activeTelemetrySource: TelemetrySourceStatus;
   lastPacketAt: string | null;
   packetCount: number;
   packetRateHz: number;
@@ -63,6 +68,10 @@ type TelemetryState = {
   logs: EngineeringLog[];
 
   setConnectionState: (state: ConnectionState) => void;
+  setTelemetrySourceConnectionState: (state: ConnectionState) => void;
+  setTelemetrySourceError: (error: string | null) => void;
+  incrementTelemetrySourceReconnectAttempts: () => void;
+  resetTelemetrySourceReconnectAttempts: () => void;
   ingestPacket: (packet: TelemetryPacket) => void;
   recordPacketRejection: (
     result: Extract<PacketValidationResult, { ok: false }>
@@ -92,6 +101,13 @@ function getSeverity(packet: TelemetryPacket): EngineeringLog["severity"] {
 
 export const useTelemetryStore = create<TelemetryState>((set) => ({
   connectionState: "OFFLINE",
+  activeTelemetrySource: {
+    ...SIMULATOR_WEBSOCKET_SOURCE,
+    connection_state: "OFFLINE",
+    last_connected_utc: null,
+    last_error: null,
+    reconnect_attempts: 0,
+  },
   lastPacketAt: null,
   packetCount: 0,
   packetRateHz: 0,
@@ -125,6 +141,47 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   logs: [],
 
   setConnectionState: (state) => set({ connectionState: state }),
+
+  setTelemetrySourceConnectionState: (sourceState) =>
+    set((state) => ({
+      connectionState: sourceState,
+      activeTelemetrySource: {
+        ...state.activeTelemetrySource,
+        connection_state: sourceState,
+        last_connected_utc:
+          sourceState === "CONNECTED"
+            ? new Date().toISOString()
+            : state.activeTelemetrySource.last_connected_utc,
+        last_error:
+          sourceState === "CONNECTED"
+            ? null
+            : state.activeTelemetrySource.last_error,
+      },
+    })),
+
+  setTelemetrySourceError: (error) =>
+    set((state) => ({
+      activeTelemetrySource: {
+        ...state.activeTelemetrySource,
+        last_error: error,
+      },
+    })),
+
+  incrementTelemetrySourceReconnectAttempts: () =>
+    set((state) => ({
+      activeTelemetrySource: {
+        ...state.activeTelemetrySource,
+        reconnect_attempts: state.activeTelemetrySource.reconnect_attempts + 1,
+      },
+    })),
+
+  resetTelemetrySourceReconnectAttempts: () =>
+    set((state) => ({
+      activeTelemetrySource: {
+        ...state.activeTelemetrySource,
+        reconnect_attempts: 0,
+      },
+    })),
 
   ageRegistry: () =>
     set((state) => {

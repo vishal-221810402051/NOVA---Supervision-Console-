@@ -18,9 +18,16 @@ export function TelemetryStats() {
   const unknownLinkPackets = useTelemetryStore((s) => s.unknownLinkPackets);
   const activeStreamId = useTelemetryStore((s) => s.activeStreamId);
   const streamSwitches = useTelemetryStore((s) => s.streamSwitches);
+  const activeTelemetrySource = useTelemetryStore((s) => s.activeTelemetrySource);
 
   return (
     <section className="grid grid-cols-4 gap-3 xl:grid-cols-9">
+      <Metric label="Active Source" value={activeTelemetrySource.display_name} />
+      <Metric label="Transport Kind" value={activeTelemetrySource.transport_kind} />
+      <Metric label="Source Endpoint" value={shortValue(activeTelemetrySource.endpoint, 24)} />
+      <Metric label="Simulated Source" value={activeTelemetrySource.is_simulated ? "TRUE" : "FALSE"} />
+      <Metric label="Reconnect Attempts" value={activeTelemetrySource.reconnect_attempts.toString()} />
+      <Metric label="Last Transport Error" value={shortValue(activeTelemetrySource.last_error ?? "NONE", 24)} />
       <Metric label="Active Stream" value={shortStreamId(activeStreamId)} />
       <Metric label="Stream Switches" value={streamSwitches.toString()} />
       <Metric label="Packet Count" value={packetCount.toString()} />
@@ -46,6 +53,10 @@ export function TelemetryStats() {
 function shortStreamId(streamId: string | null) {
   if (!streamId) return "N/A";
   return streamId.length > 18 ? `${streamId.slice(0, 18)}...` : streamId;
+}
+
+function shortValue(value: string, maxLength: number) {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

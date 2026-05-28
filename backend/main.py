@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone
 import asyncio
@@ -275,101 +275,106 @@ def health():
 async def telemetry_ws(websocket: WebSocket):
     await websocket.accept()
 
-    while True:
-        packets = []
+    try:
+        while True:
+            packets = []
 
-        packets.append(build_gateway_health_packet(next_global_sequence()))
+            packets.append(build_gateway_health_packet(next_global_sequence()))
 
-        packets.append(
-            build_node_health_packet(
-                next_global_sequence(),
-                NODE_IDS["PI_GATEWAY"],
-                "GATEWAY",
-                "Pi gateway simulator healthy",
-                software_version="pi-gateway-sim-0.1.0",
+            packets.append(
+                build_node_health_packet(
+                    next_global_sequence(),
+                    NODE_IDS["PI_GATEWAY"],
+                    "GATEWAY",
+                    "Pi gateway simulator healthy",
+                    software_version="pi-gateway-sim-0.1.0",
+                )
             )
-        )
-        packets.append(
-            build_node_health_packet(
-                next_global_sequence(),
-                NODE_IDS["ESP32_MOTION"],
-                "MOTION_CONTROL",
-                "MAIN ESP32 simulator healthy",
-                firmware_version="main-fw-sim-0.1.0",
-                reset_reason="POWER_ON_RESET",
+            packets.append(
+                build_node_health_packet(
+                    next_global_sequence(),
+                    NODE_IDS["ESP32_MOTION"],
+                    "MOTION_CONTROL",
+                    "MAIN ESP32 simulator healthy",
+                    firmware_version="main-fw-sim-0.1.0",
+                    reset_reason="POWER_ON_RESET",
+                )
             )
-        )
-        packets.append(
-            build_node_health_packet(
-                next_global_sequence(),
-                NODE_IDS["ESP32_QC"],
-                "SAFETY_QC",
-                "SUB ESP32 simulator healthy",
-                firmware_version="sub-fw-sim-0.1.0",
-                reset_reason="POWER_ON_RESET",
+            packets.append(
+                build_node_health_packet(
+                    next_global_sequence(),
+                    NODE_IDS["ESP32_QC"],
+                    "SAFETY_QC",
+                    "SUB ESP32 simulator healthy",
+                    firmware_version="sub-fw-sim-0.1.0",
+                    reset_reason="POWER_ON_RESET",
+                )
             )
-        )
 
-        packets.append(
-            build_link_heartbeat_packet(
-                next_global_sequence(),
-                LINK_IDS["LAPTOP_PI"],
-                NODE_IDS["PI_GATEWAY"],
-                NODE_IDS["LAPTOP_CONSOLE"],
-                1000,
+            packets.append(
+                build_link_heartbeat_packet(
+                    next_global_sequence(),
+                    LINK_IDS["LAPTOP_PI"],
+                    NODE_IDS["PI_GATEWAY"],
+                    NODE_IDS["LAPTOP_CONSOLE"],
+                    1000,
+                )
             )
-        )
-        packets.append(
-            build_link_heartbeat_packet(
-                next_global_sequence(),
-                LINK_IDS["PI_MAIN"],
-                NODE_IDS["PI_GATEWAY"],
-                NODE_IDS["ESP32_MOTION"],
-                500,
+            packets.append(
+                build_link_heartbeat_packet(
+                    next_global_sequence(),
+                    LINK_IDS["PI_MAIN"],
+                    NODE_IDS["PI_GATEWAY"],
+                    NODE_IDS["ESP32_MOTION"],
+                    500,
+                )
             )
-        )
-        packets.append(
-            build_link_heartbeat_packet(
-                next_global_sequence(),
-                LINK_IDS["MAIN_SUB"],
-                NODE_IDS["ESP32_MOTION"],
-                NODE_IDS["ESP32_QC"],
-                500,
+            packets.append(
+                build_link_heartbeat_packet(
+                    next_global_sequence(),
+                    LINK_IDS["MAIN_SUB"],
+                    NODE_IDS["ESP32_MOTION"],
+                    NODE_IDS["ESP32_QC"],
+                    500,
+                )
             )
-        )
 
-        packets.append(
-            build_link_sync_packet(
-                next_global_sequence(),
-                LINK_IDS["LAPTOP_PI"],
-                NODE_IDS["PI_GATEWAY"],
-                NODE_IDS["LAPTOP_CONSOLE"],
+            packets.append(
+                build_link_sync_packet(
+                    next_global_sequence(),
+                    LINK_IDS["LAPTOP_PI"],
+                    NODE_IDS["PI_GATEWAY"],
+                    NODE_IDS["LAPTOP_CONSOLE"],
+                )
             )
-        )
-        packets.append(
-            build_link_sync_packet(
-                next_global_sequence(),
-                LINK_IDS["PI_MAIN"],
-                NODE_IDS["PI_GATEWAY"],
-                NODE_IDS["ESP32_MOTION"],
+            packets.append(
+                build_link_sync_packet(
+                    next_global_sequence(),
+                    LINK_IDS["PI_MAIN"],
+                    NODE_IDS["PI_GATEWAY"],
+                    NODE_IDS["ESP32_MOTION"],
+                )
             )
-        )
-        packets.append(
-            build_link_sync_packet(
-                next_global_sequence(),
-                LINK_IDS["MAIN_SUB"],
-                NODE_IDS["ESP32_MOTION"],
-                NODE_IDS["ESP32_QC"],
+            packets.append(
+                build_link_sync_packet(
+                    next_global_sequence(),
+                    LINK_IDS["MAIN_SUB"],
+                    NODE_IDS["ESP32_MOTION"],
+                    NODE_IDS["ESP32_QC"],
+                )
             )
-        )
 
-        packets.append(build_legacy_system_health_packet(next_global_sequence()))
+            packets.append(build_legacy_system_health_packet(next_global_sequence()))
 
-        packets.append(build_gateway_forwarded_chip_packet(next_global_sequence()))
+            packets.append(build_gateway_forwarded_chip_packet(next_global_sequence()))
 
-        packets.append(build_gateway_forwarded_power_packet(next_global_sequence()))
+            packets.append(build_gateway_forwarded_power_packet(next_global_sequence()))
 
-        for packet in packets:
-            await websocket.send_json(packet)
+            for packet in packets:
+                await websocket.send_json(packet)
 
-        await asyncio.sleep(1)
+            await asyncio.sleep(1)
+    except WebSocketDisconnect:
+        print("Telemetry WebSocket client disconnected cleanly", flush=True)
+    except asyncio.CancelledError:
+        raise

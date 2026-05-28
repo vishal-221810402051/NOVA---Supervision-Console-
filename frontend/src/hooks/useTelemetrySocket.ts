@@ -1,8 +1,9 @@
 import { useEffect } from "react";
 import { useTelemetryStore } from "../store/telemetryStore";
-import { validateTelemetryPacket } from "../state/packetValidator";
+import { handleRawTelemetryMessage } from "../transport/ingestionPipeline";
+import { SIMULATOR_WEBSOCKET_SOURCE } from "../transport/telemetrySource";
 
-const TELEMETRY_WS_URL = "ws://127.0.0.1:8000/ws/telemetry";
+const TELEMETRY_WS_URL = SIMULATOR_WEBSOCKET_SOURCE.endpoint;
 const RECONNECT_DELAY_MS = 2000;
 
 let activeSocket: WebSocket | null = null;
@@ -55,7 +56,7 @@ function connectTelemetrySocket(sessionId: number) {
   clearReconnectTimer();
   closeActiveSocket();
 
-  useTelemetryStore.getState().setConnectionState("CONNECTING");
+  useTelemetryStore.getState().setTelemetrySourceConnectionState("CONNECTING");
 
   const socket = new WebSocket(TELEMETRY_WS_URL);
   activeSocket = socket;
@@ -64,43 +65,41 @@ function connectTelemetrySocket(sessionId: number) {
     if (sessionId !== activeSessionId || socket !== activeSocket) return;
 
     useTelemetryStore.getState().resetConnectionStats();
-    useTelemetryStore.getState().setConnectionState("CONNECTED");
+    useTelemetryStore.getState().resetTelemetrySourceReconnectAttempts();
+    useTelemetryStore.getState().setTelemetrySourceConnectionState("CONNECTED");
   };
 
   socket.onmessage = (event) => {
     if (sessionId !== activeSessionId || socket !== activeSocket) return;
 
-    try {
-      const parsed = JSON.parse(event.data);
-      const validation = validateTelemetryPacket(parsed);
+    const store = useTelemetryStore.getState();
 
-      if (validation.ok) {
-        useTelemetryStore.getState().ingestPacket(validation.packet);
-      } else {
-        useTelemetryStore.getState().recordPacketRejection(validation);
-      }
-    } catch {
-      useTelemetryStore.getState().recordPacketRejection({
-        ok: false,
-        reason: "INVALID_JSON",
-        severity: "ERROR",
-        details: "WebSocket message was not valid JSON",
-        raw: event.data,
-      });
-    }
+    handleRawTelemetryMessage({
+      raw: event.data,
+      sourceContext: {
+        source_id: SIMULATOR_WEBSOCKET_SOURCE.source_id,
+        transport_kind: SIMULATOR_WEBSOCKET_SOURCE.transport_kind,
+        endpoint: TELEMETRY_WS_URL,
+        is_simulated: SIMULATOR_WEBSOCKET_SOURCE.is_simulated,
+      },
+      ingestPacket: store.ingestPacket,
+      recordPacketRejection: store.recordPacketRejection,
+    });
   };
 
   socket.onerror = () => {
     if (sessionId !== activeSessionId || socket !== activeSocket) return;
 
-    useTelemetryStore.getState().setConnectionState("RECONNECTING");
+    useTelemetryStore.getState().setTelemetrySourceError("WebSocket transport error");
+    useTelemetryStore.getState().setTelemetrySourceConnectionState("RECONNECTING");
   };
 
   socket.onclose = () => {
     if (sessionId !== activeSessionId || socket !== activeSocket) return;
 
     activeSocket = null;
-    useTelemetryStore.getState().setConnectionState("RECONNECTING");
+    useTelemetryStore.getState().setTelemetrySourceConnectionState("RECONNECTING");
+    useTelemetryStore.getState().incrementTelemetrySourceReconnectAttempts();
     clearReconnectTimer();
 
     reconnectTimer = window.setTimeout(() => {
@@ -129,7 +128,7 @@ export function useTelemetrySocket() {
         clearReconnectTimer();
         closeActiveSocket();
         stopAgingTimer();
-        useTelemetryStore.getState().setConnectionState("OFFLINE");
+        useTelemetryStore.getState().setTelemetrySourceConnectionState("OFFLINE");
       }
     };
   }, []);

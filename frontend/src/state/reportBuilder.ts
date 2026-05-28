@@ -9,6 +9,7 @@ import type {
   HealthCheckRule,
   HealthState,
 } from "../types/telemetry";
+import type { TelemetrySourceStatus } from "../transport/telemetrySource";
 
 export type NovaScValidationReport = {
   report_type: "NOVA_SC_SUPERVISORY_VALIDATION_REPORT";
@@ -19,7 +20,7 @@ export type NovaScValidationReport = {
     report_schema_version: "v1.1";
     generated_at_utc: string;
     app_name: "NOVA SC";
-    nova_sc_phase: "PHASE_5_5";
+    nova_sc_phase: "PHASE_5_7";
     validation_engine_version: "V1_PLUS_TOPOLOGY_AWARE";
     simulator_mode: true;
     hardware_connected: false;
@@ -27,12 +28,15 @@ export type NovaScValidationReport = {
     physical_hardware_validation: false;
     active_stream_id: string | null;
     backend_stream_id: string | null;
+    active_source_id: string;
+    transport_kind: string;
+    transport_simulated: boolean;
     run_id: null;
   };
   project: {
     name: "NOVA SC";
-    phase: "PHASE_5_5";
-    scope: "SUPERVISORY_REPORT_EXPORT";
+    phase: "PHASE_5_7";
+    scope: "TRANSPORT_ABSTRACTION_LAYER";
   };
   system_status: {
     global_health: HealthState;
@@ -112,6 +116,17 @@ export type NovaScValidationReport = {
     unknown_node_packets: number;
     unknown_link_packets: number;
   };
+  transport_metadata: {
+    active_source_id: string;
+    display_name: string;
+    transport_kind: string;
+    endpoint: string;
+    is_simulated: boolean;
+    connection_state: ConnectionState;
+    last_connected_utc: string | null;
+    last_error: string | null;
+    reconnect_attempts: number;
+  };
   chip_status_summary: Record<string, unknown>;
   power_health_summary: Record<string, unknown>;
   expected_warnings: HealthCheckRule[];
@@ -134,6 +149,7 @@ export function buildNovaScValidationReport(params: {
     unknown: number;
   };
   gatewayHealth: GatewayHealthPayload | null;
+  activeTelemetrySource: TelemetrySourceStatus;
   globalHealth: HealthState;
   connectionState: ConnectionState;
   isTelemetryStale: boolean;
@@ -193,7 +209,7 @@ export function buildNovaScValidationReport(params: {
       report_schema_version: "v1.1",
       generated_at_utc: generatedAtUtc,
       app_name: "NOVA SC",
-      nova_sc_phase: "PHASE_5_5",
+      nova_sc_phase: "PHASE_5_7",
       validation_engine_version: "V1_PLUS_TOPOLOGY_AWARE",
       simulator_mode: true,
       hardware_connected: false,
@@ -201,12 +217,15 @@ export function buildNovaScValidationReport(params: {
       physical_hardware_validation: false,
       active_stream_id: params.activeStreamId,
       backend_stream_id: params.activeStreamId,
+      active_source_id: params.activeTelemetrySource.source_id,
+      transport_kind: params.activeTelemetrySource.transport_kind,
+      transport_simulated: params.activeTelemetrySource.is_simulated,
       run_id: null,
     },
     project: {
       name: "NOVA SC",
-      phase: "PHASE_5_5",
-      scope: "SUPERVISORY_REPORT_EXPORT",
+      phase: "PHASE_5_7",
+      scope: "TRANSPORT_ABSTRACTION_LAYER",
     },
     system_status: {
       global_health: params.globalHealth,
@@ -287,6 +306,17 @@ export function buildNovaScValidationReport(params: {
       unknown_event_packets: params.unknownEventPackets,
       unknown_node_packets: params.unknownNodePackets,
       unknown_link_packets: params.unknownLinkPackets,
+    },
+    transport_metadata: {
+      active_source_id: params.activeTelemetrySource.source_id,
+      display_name: params.activeTelemetrySource.display_name,
+      transport_kind: params.activeTelemetrySource.transport_kind,
+      endpoint: params.activeTelemetrySource.endpoint,
+      is_simulated: params.activeTelemetrySource.is_simulated,
+      connection_state: params.activeTelemetrySource.connection_state,
+      last_connected_utc: params.activeTelemetrySource.last_connected_utc,
+      last_error: params.activeTelemetrySource.last_error,
+      reconnect_attempts: params.activeTelemetrySource.reconnect_attempts,
     },
     chip_status_summary: buildChipStatusSummary(params.deviceRegistry),
     power_health_summary: buildPowerHealthSummary(params.deviceRegistry),
