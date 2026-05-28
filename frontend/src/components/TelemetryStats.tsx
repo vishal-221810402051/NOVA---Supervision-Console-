@@ -16,6 +16,7 @@ export function TelemetryStats() {
   const unknownEventPackets = useTelemetryStore((s) => s.unknownEventPackets);
   const unknownNodePackets = useTelemetryStore((s) => s.unknownNodePackets);
   const unknownLinkPackets = useTelemetryStore((s) => s.unknownLinkPackets);
+  const eventStoreSummary = useTelemetryStore((s) => s.eventStoreSummary);
   const activeStreamId = useTelemetryStore((s) => s.activeStreamId);
   const streamSwitches = useTelemetryStore((s) => s.streamSwitches);
   const activeTelemetrySource = useTelemetryStore((s) => s.activeTelemetrySource);
@@ -43,6 +44,9 @@ export function TelemetryStats() {
       <Metric label="Unknown Events" value={unknownEventPackets.toString()} />
       <Metric label="Unknown Nodes" value={unknownNodePackets.toString()} />
       <Metric label="Unknown Links" value={unknownLinkPackets.toString()} />
+      <Metric label="Event Store Count" value={eventStoreSummary.current_events.toString()} />
+      <Metric label="Latest Event Seq" value={eventStoreSummary.latest_event_store_sequence.toString()} />
+      <Metric label="Dropped Old Events" value={eventStoreSummary.dropped_old_events.toString()} />
       <Metric label="Last Packet UTC" value={lastPacketAt ?? "NO PACKET"} />
       <Metric label="Healthy Devices" value={registrySummary.healthy.toString()} />
       <Metric label="Offline Devices" value={registrySummary.offline.toString()} />

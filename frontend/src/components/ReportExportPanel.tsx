@@ -29,6 +29,8 @@ export function ReportExportPanel() {
   const unknownEventPackets = useTelemetryStore((s) => s.unknownEventPackets);
   const unknownNodePackets = useTelemetryStore((s) => s.unknownNodePackets);
   const unknownLinkPackets = useTelemetryStore((s) => s.unknownLinkPackets);
+  const eventStoreSummary = useTelemetryStore((s) => s.eventStoreSummary);
+  const eventStoreRecent = useTelemetryStore((s) => s.eventStore.slice(-50));
   const lastPacketAt = useTelemetryStore((s) => s.lastPacketAt);
   const logs = useTelemetryStore((s) => s.logs);
 
@@ -58,6 +60,8 @@ export function ReportExportPanel() {
       unknownEventPackets,
       unknownNodePackets,
       unknownLinkPackets,
+      eventStoreSummary,
+      eventStoreRecent,
       lastPacketAt,
       logs,
     });
@@ -90,6 +94,7 @@ export function ReportExportPanel() {
         <Metric label="Format" value="JSON" />
         <Metric label="Scope" value="Topology + Gateway + Links + Stream + Devices" />
         <Metric label="Includes Logs" value="Last 50 Events" />
+        <Metric label="Includes Event Store" value="Last 50 Event Records" />
         <Metric label="Simulator Mode" value="TRUE" />
         <Metric label="Hardware Connected" value="FALSE" />
         <Metric label="Physical Hardware Validation" value="FALSE" />

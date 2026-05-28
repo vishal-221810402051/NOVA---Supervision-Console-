@@ -10,6 +10,10 @@ import type {
   HealthState,
 } from "../types/telemetry";
 import type { TelemetrySourceStatus } from "../transport/telemetrySource";
+import type {
+  EventStoreSummary,
+  TelemetryEventRecord,
+} from "./eventStore";
 
 export type NovaScValidationReport = {
   report_type: "NOVA_SC_SUPERVISORY_VALIDATION_REPORT";
@@ -20,7 +24,7 @@ export type NovaScValidationReport = {
     report_schema_version: "v1.1";
     generated_at_utc: string;
     app_name: "NOVA SC";
-    nova_sc_phase: "PHASE_5_7";
+    nova_sc_phase: "PHASE_5_8";
     validation_engine_version: "V1_PLUS_TOPOLOGY_AWARE";
     simulator_mode: true;
     hardware_connected: false;
@@ -35,8 +39,8 @@ export type NovaScValidationReport = {
   };
   project: {
     name: "NOVA SC";
-    phase: "PHASE_5_7";
-    scope: "TRANSPORT_ABSTRACTION_LAYER";
+    phase: "PHASE_5_8";
+    scope: "APPEND_ONLY_EVENT_STORE";
   };
   system_status: {
     global_health: HealthState;
@@ -116,6 +120,8 @@ export type NovaScValidationReport = {
     unknown_node_packets: number;
     unknown_link_packets: number;
   };
+  event_store_summary: EventStoreSummary;
+  event_store_recent: TelemetryEventRecord[];
   transport_metadata: {
     active_source_id: string;
     display_name: string;
@@ -169,6 +175,8 @@ export function buildNovaScValidationReport(params: {
   unknownEventPackets: number;
   unknownNodePackets: number;
   unknownLinkPackets: number;
+  eventStoreSummary: EventStoreSummary;
+  eventStoreRecent: TelemetryEventRecord[];
   lastPacketAt: string | null;
   logs: EngineeringLog[];
 }): NovaScValidationReport {
@@ -209,7 +217,7 @@ export function buildNovaScValidationReport(params: {
       report_schema_version: "v1.1",
       generated_at_utc: generatedAtUtc,
       app_name: "NOVA SC",
-      nova_sc_phase: "PHASE_5_7",
+      nova_sc_phase: "PHASE_5_8",
       validation_engine_version: "V1_PLUS_TOPOLOGY_AWARE",
       simulator_mode: true,
       hardware_connected: false,
@@ -224,8 +232,8 @@ export function buildNovaScValidationReport(params: {
     },
     project: {
       name: "NOVA SC",
-      phase: "PHASE_5_7",
-      scope: "TRANSPORT_ABSTRACTION_LAYER",
+      phase: "PHASE_5_8",
+      scope: "APPEND_ONLY_EVENT_STORE",
     },
     system_status: {
       global_health: params.globalHealth,
@@ -307,6 +315,8 @@ export function buildNovaScValidationReport(params: {
       unknown_node_packets: params.unknownNodePackets,
       unknown_link_packets: params.unknownLinkPackets,
     },
+    event_store_summary: params.eventStoreSummary,
+    event_store_recent: params.eventStoreRecent,
     transport_metadata: {
       active_source_id: params.activeTelemetrySource.source_id,
       display_name: params.activeTelemetrySource.display_name,

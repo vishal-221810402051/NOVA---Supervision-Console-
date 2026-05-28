@@ -31,6 +31,16 @@ import {
   SIMULATOR_WEBSOCKET_SOURCE,
   type TelemetrySourceStatus,
 } from "../transport/telemetrySource";
+import {
+  appendBoundedEvent,
+  createTelemetryEventRecord,
+  DEFAULT_EVENT_STORE_MAX_EVENTS,
+  getEventStoreSummary,
+  type EventStoreSummary,
+  type TelemetryEventDisposition,
+  type TelemetryEventInput,
+  type TelemetryEventRecord,
+} from "../state/eventStore";
 
 type TelemetryState = {
   connectionState: ConnectionState;
@@ -54,6 +64,11 @@ type TelemetryState = {
   unknownEventPackets: number;
   unknownNodePackets: number;
   unknownLinkPackets: number;
+  eventStore: TelemetryEventRecord[];
+  eventStoreLatestSequence: number;
+  eventStoreDroppedOldEvents: number;
+  eventStoreMaxEvents: number;
+  eventStoreSummary: EventStoreSummary;
   recentPacketKeys: string[];
   systemHealth: SystemHealthPayload | null;
   chipStatus: ChipStatusPayload | null;
@@ -127,6 +142,16 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   unknownEventPackets: 0,
   unknownNodePackets: 0,
   unknownLinkPackets: 0,
+  eventStore: [],
+  eventStoreLatestSequence: 0,
+  eventStoreDroppedOldEvents: 0,
+  eventStoreMaxEvents: DEFAULT_EVENT_STORE_MAX_EVENTS,
+  eventStoreSummary: getEventStoreSummary({
+    events: [],
+    maxEvents: DEFAULT_EVENT_STORE_MAX_EVENTS,
+    latestSequence: 0,
+    droppedOldEvents: 0,
+  }),
   recentPacketKeys: [],
   systemHealth: null,
   chipStatus: null,
@@ -218,6 +243,15 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       unknownEventPackets: 0,
       unknownNodePackets: 0,
       unknownLinkPackets: 0,
+      eventStore: [],
+      eventStoreLatestSequence: 0,
+      eventStoreDroppedOldEvents: 0,
+      eventStoreSummary: getEventStoreSummary({
+        events: [],
+        maxEvents: DEFAULT_EVENT_STORE_MAX_EVENTS,
+        latestSequence: 0,
+        droppedOldEvents: 0,
+      }),
       packetRateHz: 0,
       packetWindow: [],
       recentPacketKeys: [],
@@ -237,6 +271,15 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       unknownEventPackets: 0,
       unknownNodePackets: 0,
       unknownLinkPackets: 0,
+      eventStore: [],
+      eventStoreLatestSequence: 0,
+      eventStoreDroppedOldEvents: 0,
+      eventStoreSummary: getEventStoreSummary({
+        events: [],
+        maxEvents: DEFAULT_EVENT_STORE_MAX_EVENTS,
+        latestSequence: 0,
+        droppedOldEvents: 0,
+      }),
       packetRateHz: 0,
       packetWindow: [],
       logs: [],
@@ -249,8 +292,23 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         activeStreamId: state.activeStreamId,
         lastSequenceNumber: state.lastSequenceNumber,
       });
+      const eventUpdate = appendTelemetryEvent(state, {
+        event_kind: "PACKET_REJECTION",
+        disposition: mapRejectionDisposition(result.reason),
+        source_type: "VALIDATOR",
+        stream_id: state.activeStreamId,
+        source_node_id: null,
+        global_sequence_number: null,
+        source_sequence_number: null,
+        event_type: "TELEMETRY_INTEGRITY_EVENT",
+        rejection_reason: result.reason,
+        severity: result.severity,
+        details: result.details,
+        integrity_flags: ["SCHEMA_REJECTION"],
+      });
 
       return {
+        ...eventUpdate,
         schemaRejectedPackets: state.schemaRejectedPackets + 1,
         malformedPackets: malformed
           ? state.malformedPackets + 1
@@ -320,7 +378,20 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       };
 
       if (duplicateDetected) {
+        const eventUpdate = appendTelemetryEvent(
+          state,
+          buildPacketEventInput(packet, {
+            disposition: "DUPLICATE_REJECTED",
+            eventKind: "INTEGRITY_ANOMALY",
+            sourceType: "STORE_INTEGRITY",
+            severity: "WARNING",
+            details: "Duplicate packet ignored",
+            integrityFlags: ["DUPLICATE_PACKET"],
+          })
+        );
+
         return {
+          ...eventUpdate,
           ...baseObservedUpdate,
           duplicatePackets: state.duplicatePackets + 1,
           logs: [
@@ -331,7 +402,20 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       }
 
       if (outOfOrderDetected) {
+        const eventUpdate = appendTelemetryEvent(
+          state,
+          buildPacketEventInput(packet, {
+            disposition: "OUT_OF_ORDER_REJECTED",
+            eventKind: "INTEGRITY_ANOMALY",
+            sourceType: "STORE_INTEGRITY",
+            severity: "ERROR",
+            details: `Out-of-order packet ignored seq=${globalSequenceNumber} accepted=${state.lastAcceptedSequenceNumber}`,
+            integrityFlags: ["OUT_OF_ORDER_PACKET"],
+          })
+        );
+
         return {
+          ...eventUpdate,
           ...baseObservedUpdate,
           outOfOrderPackets: state.outOfOrderPackets + 1,
           logs: [
@@ -462,8 +546,20 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       const recentPacketKeys = sequenceResetDetected || streamSwitchDetected
         ? [packetKey]
         : [...recentKeysForStream, packetKey].slice(-300);
+      const acceptedEventUpdate = appendTelemetryEvent(
+        state,
+        buildAcceptedPacketEventInput(packet, {
+          streamSwitchDetected,
+          sequenceResetDetected:
+            sequenceResetDetected || sourceSequenceResetDetected,
+          gap,
+          previousStreamId: state.activeStreamId,
+          expectedNext,
+        })
+      );
 
       return {
+        ...acceptedEventUpdate,
         ...baseObservedUpdate,
         lastPacketAt: packet.timestamp_utc,
         lastAcceptedSequenceNumber: globalSequenceNumber,
@@ -559,4 +655,122 @@ function isMalformedRejection(reason: Extract<PacketValidationResult, { ok: fals
     reason === "INVALID_TIMESTAMP" ||
     reason === "INVALID_NUMERIC_RANGE"
   );
+}
+
+function appendTelemetryEvent(
+  state: TelemetryState,
+  input: TelemetryEventInput
+) {
+  const nextSequence = state.eventStoreLatestSequence + 1;
+  const event = createTelemetryEventRecord({
+    sequence: nextSequence,
+    input,
+  });
+  const bounded = appendBoundedEvent({
+    events: state.eventStore,
+    event,
+    maxEvents: state.eventStoreMaxEvents,
+    droppedOldEvents: state.eventStoreDroppedOldEvents,
+  });
+
+  return {
+    eventStore: bounded.events,
+    eventStoreLatestSequence: nextSequence,
+    eventStoreDroppedOldEvents: bounded.droppedOldEvents,
+    eventStoreSummary: getEventStoreSummary({
+      events: bounded.events,
+      maxEvents: state.eventStoreMaxEvents,
+      latestSequence: nextSequence,
+      droppedOldEvents: bounded.droppedOldEvents,
+    }),
+  };
+}
+
+function buildAcceptedPacketEventInput(
+  packet: TelemetryPacket,
+  context: {
+    streamSwitchDetected: boolean;
+    sequenceResetDetected: boolean;
+    gap: number;
+    previousStreamId: string | null;
+    expectedNext: number;
+  }
+): TelemetryEventInput {
+  if (context.streamSwitchDetected) {
+    return buildPacketEventInput(packet, {
+      disposition: "STREAM_SWITCH_ACCEPTED",
+      eventKind: "INTEGRITY_ANOMALY",
+      sourceType: "STORE_INTEGRITY",
+      severity: "WARNING",
+      details: `Stream switch accepted previous=${context.previousStreamId} new=${packet.stream_id}`,
+      integrityFlags: ["STREAM_SWITCH"],
+    });
+  }
+
+  if (context.sequenceResetDetected) {
+    return buildPacketEventInput(packet, {
+      disposition: "SEQUENCE_RESET_ACCEPTED",
+      eventKind: "INTEGRITY_ANOMALY",
+      sourceType: "STORE_INTEGRITY",
+      severity: "WARNING",
+      details: `Sequence reset accepted seq=${getGlobalSequenceNumber(packet)}`,
+      integrityFlags: ["SEQUENCE_RESET"],
+    });
+  }
+
+  if (context.gap > 0) {
+    return buildPacketEventInput(packet, {
+      disposition: "SEQUENCE_GAP_ACCEPTED",
+      eventKind: "INTEGRITY_ANOMALY",
+      sourceType: "STORE_INTEGRITY",
+      severity: "WARNING",
+      details: `Sequence gap accepted gap=${context.gap} expected=${context.expectedNext} received=${getGlobalSequenceNumber(packet)}`,
+      integrityFlags: ["SEQUENCE_GAP"],
+    });
+  }
+
+  return buildPacketEventInput(packet, {
+    disposition: "ACCEPTED",
+    eventKind: "TELEMETRY_PACKET",
+    sourceType: "TRANSPORT",
+    severity: "INFO",
+    details: "Telemetry packet accepted",
+  });
+}
+
+function buildPacketEventInput(
+  packet: TelemetryPacket,
+  params: {
+    disposition: TelemetryEventDisposition;
+    eventKind: TelemetryEventInput["event_kind"];
+    sourceType: TelemetryEventInput["source_type"];
+    severity: TelemetryEventInput["severity"];
+    details: string;
+    integrityFlags?: string[];
+  }
+): TelemetryEventInput {
+  return {
+    event_kind: params.eventKind,
+    disposition: params.disposition,
+    source_type: params.sourceType,
+    stream_id: packet.stream_id,
+    source_node_id: packet.source_node_id,
+    global_sequence_number: getGlobalSequenceNumber(packet),
+    source_sequence_number: packet.source_sequence_number,
+    event_type: packet.event_type,
+    packet,
+    severity: params.severity,
+    details: params.details,
+    integrity_flags: params.integrityFlags,
+  };
+}
+
+function mapRejectionDisposition(
+  reason: Extract<PacketValidationResult, { ok: false }>["reason"]
+): TelemetryEventDisposition {
+  if (reason === "INVALID_SCHEMA_VERSION") return "SCHEMA_REJECTED";
+  if (reason === "UNKNOWN_EVENT_TYPE") return "UNKNOWN_EVENT_REJECTED";
+  if (reason === "UNKNOWN_SOURCE_NODE") return "UNKNOWN_NODE_REJECTED";
+  if (reason === "UNKNOWN_LINK_ID") return "UNKNOWN_LINK_REJECTED";
+  return "MALFORMED_REJECTED";
 }
