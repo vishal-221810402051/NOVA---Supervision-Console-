@@ -38,10 +38,10 @@ export default function App() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold tracking-widest text-cyan-300">
-                NOVA SC / PHASE 5.2
+                NOVA SC / PHASE 5.3
               </h1>
               <p className="text-xs uppercase tracking-widest text-slate-500">
-                Pi-Centered Backend Simulator
+                Topology UI Polish
               </p>
             </div>
 
