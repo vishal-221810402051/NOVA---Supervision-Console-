@@ -110,7 +110,9 @@ export function evaluateV1PlusHealthCheck(params: {
   sequenceGaps: number;
   sequenceResets: number;
   streamSwitches: number;
-}): {
+}, options: {
+  nowMs?: number;
+} = {}): {
   overall: HealthCheckResult;
   rules: HealthCheckRule[];
   summary: {
@@ -127,7 +129,7 @@ export function evaluateV1PlusHealthCheck(params: {
   const rules: HealthCheckRule[] = [
     ...topologyRules(params, piGateway, mainMcu, subMcu),
     ...gatewayRules(params.gatewayHealth, piGateway),
-    ...linkRules(params.linkRegistry, params.connectionState),
+    ...linkRules(params.linkRegistry, params.connectionState, options.nowMs),
     ...streamRules(params),
     ...integrityRules(params),
     nodeRule("NODE_PI_GATEWAY_HEALTH", "Pi gateway node", piGateway),
@@ -340,19 +342,21 @@ function gatewayRules(
 
 function linkRules(
   linkRegistry: LinkRegistry,
-  connectionState: ConnectionState
+  connectionState: ConnectionState,
+  nowMs?: number
 ): HealthCheckRule[] {
   return [
-    ...rulesForLink("LAPTOP_PI", linkRegistry[LINK_IDS.LAPTOP_PI], connectionState),
-    ...rulesForLink("PI_MAIN", linkRegistry[LINK_IDS.PI_MAIN], connectionState),
-    ...rulesForLink("MAIN_SUB", linkRegistry[LINK_IDS.MAIN_SUB], connectionState),
+    ...rulesForLink("LAPTOP_PI", linkRegistry[LINK_IDS.LAPTOP_PI], connectionState, nowMs),
+    ...rulesForLink("PI_MAIN", linkRegistry[LINK_IDS.PI_MAIN], connectionState, nowMs),
+    ...rulesForLink("MAIN_SUB", linkRegistry[LINK_IDS.MAIN_SUB], connectionState, nowMs),
   ];
 }
 
 function rulesForLink(
   id: string,
   link: LinkRegistryEntry | undefined,
-  connectionState: ConnectionState
+  connectionState: ConnectionState,
+  nowMs?: number
 ): HealthCheckRule[] {
   if (!link) {
     return [
@@ -370,7 +374,7 @@ function rulesForLink(
 
   const health = linkStateResult(link.link_state);
   const sync = syncStateResult(link.sync_state);
-  const heartbeatAge = getHeartbeatAgeMs(link);
+  const heartbeatAge = getHeartbeatAgeMs(link, nowMs);
   const freshness = heartbeatFreshnessResult(heartbeatAge, connectionState);
 
   return [
@@ -892,7 +896,7 @@ function heartbeatFreshnessResult(
   return { result: "PASS", severity: "INFO" };
 }
 
-function getHeartbeatAgeMs(link: LinkRegistryEntry): number | null {
+function getHeartbeatAgeMs(link: LinkRegistryEntry, nowMs: number = Date.now()): number | null {
   if (!link.last_heartbeat_utc) return null;
-  return Math.max(0, Date.now() - new Date(link.last_heartbeat_utc).getTime());
+  return Math.max(0, nowMs - new Date(link.last_heartbeat_utc).getTime());
 }

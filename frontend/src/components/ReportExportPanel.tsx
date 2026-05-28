@@ -29,12 +29,16 @@ export function ReportExportPanel() {
   const unknownEventPackets = useTelemetryStore((s) => s.unknownEventPackets);
   const unknownNodePackets = useTelemetryStore((s) => s.unknownNodePackets);
   const unknownLinkPackets = useTelemetryStore((s) => s.unknownLinkPackets);
+  const eventStore = useTelemetryStore((s) => s.eventStore);
   const eventStoreSummary = useTelemetryStore((s) => s.eventStoreSummary);
-  const eventStoreRecent = useTelemetryStore((s) => s.eventStore.slice(-50));
+  const eventStoreDroppedOldEvents = useTelemetryStore((s) => s.eventStoreDroppedOldEvents);
+  const eventStoreMaxEvents = useTelemetryStore((s) => s.eventStoreMaxEvents);
   const lastPacketAt = useTelemetryStore((s) => s.lastPacketAt);
   const logs = useTelemetryStore((s) => s.logs);
 
   const handleDownload = () => {
+    const eventStoreRecent = eventStore.slice(-50);
+
     const report = buildNovaScValidationReport({
       deviceRegistry,
       linkRegistry,
@@ -62,6 +66,9 @@ export function ReportExportPanel() {
       unknownLinkPackets,
       eventStoreSummary,
       eventStoreRecent,
+      eventStore,
+      eventStoreDroppedOldEvents,
+      eventStoreMaxEvents,
       lastPacketAt,
       logs,
     });
@@ -95,6 +102,7 @@ export function ReportExportPanel() {
         <Metric label="Scope" value="Topology + Gateway + Links + Stream + Devices" />
         <Metric label="Includes Logs" value="Last 50 Events" />
         <Metric label="Includes Event Store" value="Last 50 Event Records" />
+        <Metric label="Replay Reconstruction" value="Included" />
         <Metric label="Simulator Mode" value="TRUE" />
         <Metric label="Hardware Connected" value="FALSE" />
         <Metric label="Physical Hardware Validation" value="FALSE" />

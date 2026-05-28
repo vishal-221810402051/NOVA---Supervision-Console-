@@ -14,6 +14,11 @@ import type {
   EventStoreSummary,
   TelemetryEventRecord,
 } from "./eventStore";
+import {
+  buildReplaySnapshot,
+  type LiveVsReplaySummary,
+  type ReplaySnapshot,
+} from "./replayReducer";
 
 export type NovaScValidationReport = {
   report_type: "NOVA_SC_SUPERVISORY_VALIDATION_REPORT";
@@ -24,7 +29,7 @@ export type NovaScValidationReport = {
     report_schema_version: "v1.1";
     generated_at_utc: string;
     app_name: "NOVA SC";
-    nova_sc_phase: "PHASE_5_8";
+    nova_sc_phase: "PHASE_5_9";
     validation_engine_version: "V1_PLUS_TOPOLOGY_AWARE";
     simulator_mode: true;
     hardware_connected: false;
@@ -39,8 +44,8 @@ export type NovaScValidationReport = {
   };
   project: {
     name: "NOVA SC";
-    phase: "PHASE_5_8";
-    scope: "APPEND_ONLY_EVENT_STORE";
+    phase: "PHASE_5_9";
+    scope: "REPLAY_REDUCER";
   };
   system_status: {
     global_health: HealthState;
@@ -122,6 +127,9 @@ export type NovaScValidationReport = {
   };
   event_store_summary: EventStoreSummary;
   event_store_recent: TelemetryEventRecord[];
+  replay_snapshot: ReplaySnapshot;
+  replay_validation_result: ReplaySnapshot["validation"];
+  live_vs_replay_summary: LiveVsReplaySummary;
   transport_metadata: {
     active_source_id: string;
     display_name: string;
@@ -177,6 +185,9 @@ export function buildNovaScValidationReport(params: {
   unknownLinkPackets: number;
   eventStoreSummary: EventStoreSummary;
   eventStoreRecent: TelemetryEventRecord[];
+  eventStore: TelemetryEventRecord[];
+  eventStoreDroppedOldEvents: number;
+  eventStoreMaxEvents: number;
   lastPacketAt: string | null;
   logs: EngineeringLog[];
 }): NovaScValidationReport {
@@ -207,6 +218,22 @@ export function buildNovaScValidationReport(params: {
     !params.isTelemetryStale &&
     links.every((link) => link.link_state === "LINK_HEALTHY") &&
     links.every((link) => link.sync_state === "SYNCED");
+  const replaySnapshot = buildReplaySnapshot({
+    events: params.eventStore,
+    droppedOldEvents: params.eventStoreDroppedOldEvents,
+    maxEvents: params.eventStoreMaxEvents,
+    liveState: {
+      deviceRegistry: params.deviceRegistry,
+      linkRegistry: params.linkRegistry,
+      gatewayHealth: params.gatewayHealth,
+      activeStreamId: params.activeStreamId,
+      duplicatePackets: params.duplicatePackets,
+      outOfOrderPackets: params.outOfOrderPackets,
+      sequenceGaps: params.sequenceGaps,
+      sequenceResets: params.sequenceResets,
+      streamSwitches: params.streamSwitches,
+    },
+  });
 
   return {
     report_type: "NOVA_SC_SUPERVISORY_VALIDATION_REPORT",
@@ -217,7 +244,7 @@ export function buildNovaScValidationReport(params: {
       report_schema_version: "v1.1",
       generated_at_utc: generatedAtUtc,
       app_name: "NOVA SC",
-      nova_sc_phase: "PHASE_5_8",
+      nova_sc_phase: "PHASE_5_9",
       validation_engine_version: "V1_PLUS_TOPOLOGY_AWARE",
       simulator_mode: true,
       hardware_connected: false,
@@ -232,8 +259,8 @@ export function buildNovaScValidationReport(params: {
     },
     project: {
       name: "NOVA SC",
-      phase: "PHASE_5_8",
-      scope: "APPEND_ONLY_EVENT_STORE",
+      phase: "PHASE_5_9",
+      scope: "REPLAY_REDUCER",
     },
     system_status: {
       global_health: params.globalHealth,
@@ -317,6 +344,9 @@ export function buildNovaScValidationReport(params: {
     },
     event_store_summary: params.eventStoreSummary,
     event_store_recent: params.eventStoreRecent,
+    replay_snapshot: replaySnapshot,
+    replay_validation_result: replaySnapshot.validation,
+    live_vs_replay_summary: replaySnapshot.comparison,
     transport_metadata: {
       active_source_id: params.activeTelemetrySource.source_id,
       display_name: params.activeTelemetrySource.display_name,

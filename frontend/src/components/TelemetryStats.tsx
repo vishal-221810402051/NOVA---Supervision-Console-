@@ -17,6 +17,7 @@ export function TelemetryStats() {
   const unknownNodePackets = useTelemetryStore((s) => s.unknownNodePackets);
   const unknownLinkPackets = useTelemetryStore((s) => s.unknownLinkPackets);
   const eventStoreSummary = useTelemetryStore((s) => s.eventStoreSummary);
+  const eventStoreDroppedOldEvents = useTelemetryStore((s) => s.eventStoreDroppedOldEvents);
   const activeStreamId = useTelemetryStore((s) => s.activeStreamId);
   const streamSwitches = useTelemetryStore((s) => s.streamSwitches);
   const activeTelemetrySource = useTelemetryStore((s) => s.activeTelemetrySource);
@@ -47,6 +48,9 @@ export function TelemetryStats() {
       <Metric label="Event Store Count" value={eventStoreSummary.current_events.toString()} />
       <Metric label="Latest Event Seq" value={eventStoreSummary.latest_event_store_sequence.toString()} />
       <Metric label="Dropped Old Events" value={eventStoreSummary.dropped_old_events.toString()} />
+      <Metric label="Replay Snapshot" value={eventStoreSummary.current_events > 0 ? "AVAILABLE" : "EMPTY"} />
+      <Metric label="Replay Complete" value={eventStoreDroppedOldEvents === 0 ? "YES" : "PARTIAL"} />
+      <Metric label="Replay Events" value={eventStoreSummary.current_events.toString()} />
       <Metric label="Last Packet UTC" value={lastPacketAt ?? "NO PACKET"} />
       <Metric label="Healthy Devices" value={registrySummary.healthy.toString()} />
       <Metric label="Offline Devices" value={registrySummary.offline.toString()} />

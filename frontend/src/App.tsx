@@ -38,10 +38,10 @@ export default function App() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold tracking-widest text-cyan-300">
-                NOVA SC / PHASE 5.8
+                NOVA SC / PHASE 5.9
               </h1>
               <p className="text-xs uppercase tracking-widest text-slate-500">
-                Append-Only Event Store
+                Replay Reducer
               </p>
             </div>
 
