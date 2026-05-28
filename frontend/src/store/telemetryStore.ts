@@ -4,6 +4,7 @@ import type {
   ConnectionState,
   EngineeringLog,
   GatewayHealthPayload,
+  PacketValidationResult,
   PowerHealthPayload,
   SystemHealthPayload,
   TelemetryPacket,
@@ -43,6 +44,11 @@ type TelemetryState = {
   outOfOrderPackets: number;
   sequenceResets: number;
   sequenceGaps: number;
+  schemaRejectedPackets: number;
+  malformedPackets: number;
+  unknownEventPackets: number;
+  unknownNodePackets: number;
+  unknownLinkPackets: number;
   recentPacketKeys: string[];
   systemHealth: SystemHealthPayload | null;
   chipStatus: ChipStatusPayload | null;
@@ -58,6 +64,9 @@ type TelemetryState = {
 
   setConnectionState: (state: ConnectionState) => void;
   ingestPacket: (packet: TelemetryPacket) => void;
+  recordPacketRejection: (
+    result: Extract<PacketValidationResult, { ok: false }>
+  ) => void;
   ageRegistry: () => void;
   resetPacketStats: () => void;
   resetConnectionStats: () => void;
@@ -97,6 +106,11 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   outOfOrderPackets: 0,
   sequenceResets: 0,
   sequenceGaps: 0,
+  schemaRejectedPackets: 0,
+  malformedPackets: 0,
+  unknownEventPackets: 0,
+  unknownNodePackets: 0,
+  unknownLinkPackets: 0,
   recentPacketKeys: [],
   systemHealth: null,
   chipStatus: null,
@@ -142,6 +156,11 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       outOfOrderPackets: 0,
       sequenceResets: 0,
       sequenceGaps: 0,
+      schemaRejectedPackets: 0,
+      malformedPackets: 0,
+      unknownEventPackets: 0,
+      unknownNodePackets: 0,
+      unknownLinkPackets: 0,
       packetRateHz: 0,
       packetWindow: [],
       recentPacketKeys: [],
@@ -156,9 +175,43 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       duplicatePackets: 0,
       outOfOrderPackets: 0,
       sequenceGaps: 0,
+      schemaRejectedPackets: 0,
+      malformedPackets: 0,
+      unknownEventPackets: 0,
+      unknownNodePackets: 0,
+      unknownLinkPackets: 0,
       packetRateHz: 0,
       packetWindow: [],
       logs: [],
+    }),
+
+  recordPacketRejection: (result) =>
+    set((state) => {
+      const malformed = isMalformedRejection(result.reason);
+      const log = buildPacketRejectionLog(result, {
+        activeStreamId: state.activeStreamId,
+        lastSequenceNumber: state.lastSequenceNumber,
+      });
+
+      return {
+        schemaRejectedPackets: state.schemaRejectedPackets + 1,
+        malformedPackets: malformed
+          ? state.malformedPackets + 1
+          : state.malformedPackets,
+        unknownEventPackets:
+          result.reason === "UNKNOWN_EVENT_TYPE"
+            ? state.unknownEventPackets + 1
+            : state.unknownEventPackets,
+        unknownNodePackets:
+          result.reason === "UNKNOWN_SOURCE_NODE"
+            ? state.unknownNodePackets + 1
+            : state.unknownNodePackets,
+        unknownLinkPackets:
+          result.reason === "UNKNOWN_LINK_ID"
+            ? state.unknownLinkPackets + 1
+            : state.unknownLinkPackets,
+        logs: [log, ...state.logs].slice(0, 100),
+      };
     }),
 
   ingestPacket: (packet) =>
@@ -418,4 +471,35 @@ function buildAnomalyLog(
     severity,
     message,
   };
+}
+
+function buildPacketRejectionLog(
+  result: Extract<PacketValidationResult, { ok: false }>,
+  context: {
+    activeStreamId: string | null;
+    lastSequenceNumber: number | null;
+  }
+): EngineeringLog {
+  return {
+    timestamp_utc: new Date().toISOString(),
+    node_id: "laptop_console",
+    source_node_id: "laptop_console",
+    event_type: "TELEMETRY_INTEGRITY_EVENT",
+    sequence_number: context.lastSequenceNumber ?? 0,
+    global_sequence_number: context.lastSequenceNumber ?? 0,
+    source_sequence_number: 0,
+    stream_id: context.activeStreamId ?? "UNKNOWN_STREAM",
+    severity: result.severity,
+    message: `SCHEMA_REJECTION: ${result.reason} - ${result.details}`,
+  };
+}
+
+function isMalformedRejection(reason: Extract<PacketValidationResult, { ok: false }>["reason"]) {
+  return (
+    reason === "INVALID_JSON" ||
+    reason === "MISSING_REQUIRED_FIELD" ||
+    reason === "INVALID_PAYLOAD_SHAPE" ||
+    reason === "INVALID_TIMESTAMP" ||
+    reason === "INVALID_NUMERIC_RANGE"
+  );
 }

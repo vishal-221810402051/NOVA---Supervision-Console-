@@ -49,7 +49,8 @@ export type EventType =
   | "GATEWAY_HEALTH_TELEMETRY"
   | "LINK_HEARTBEAT_TELEMETRY"
   | "LINK_SYNC_TELEMETRY"
-  | "NODE_HEALTH_TELEMETRY";
+  | "NODE_HEALTH_TELEMETRY"
+  | "TELEMETRY_INTEGRITY_EVENT";
 
 export type MainMcuHealth = {
   node_id: "esp32_motion";
@@ -157,6 +158,41 @@ export type NodeHealthPayload = {
   status_message: string;
 };
 
+export type PacketRejectionReason =
+  | "INVALID_JSON"
+  | "MISSING_REQUIRED_FIELD"
+  | "INVALID_SCHEMA_VERSION"
+  | "UNKNOWN_EVENT_TYPE"
+  | "UNKNOWN_SOURCE_NODE"
+  | "UNKNOWN_LINK_ID"
+  | "INVALID_PAYLOAD_SHAPE"
+  | "INVALID_TIMESTAMP"
+  | "INVALID_NUMERIC_RANGE"
+  | "EVENT_SOURCE_MISMATCH";
+
+export type PacketValidationWarning = {
+  code: string;
+  details: string;
+};
+
+export type TelemetryIntegrityEventPayload = {
+  anomaly_type:
+    | "DUPLICATE_PACKET"
+    | "OUT_OF_ORDER_PACKET"
+    | "SEQUENCE_GAP"
+    | "SEQUENCE_RESET"
+    | "SCHEMA_REJECTION"
+    | "UNKNOWN_SOURCE"
+    | "UNKNOWN_EVENT"
+    | "UNKNOWN_LINK"
+    | "MALFORMED_PACKET";
+  severity: LogSeverity;
+  affected_stream_id: string | null;
+  affected_source_node_id: string | null;
+  affected_sequence_number: number | null;
+  details: string;
+};
+
 export type TelemetryPacket =
   | {
       schema_version: string;
@@ -262,6 +298,35 @@ export type TelemetryPacket =
       node_id: string;
       event_type: "NODE_HEALTH_TELEMETRY";
       payload: NodeHealthPayload;
+    }
+  | {
+      schema_version: string;
+      stream_id: string;
+      global_sequence_number: number;
+      source_node_id: string;
+      source_sequence_number: number;
+      producer_timestamp_utc: string;
+      supervisor_received_utc: string;
+      timestamp_utc: string;
+      sequence_number: number;
+      run_id: string;
+      node_id: string;
+      event_type: "TELEMETRY_INTEGRITY_EVENT";
+      payload: TelemetryIntegrityEventPayload;
+    };
+
+export type PacketValidationResult =
+  | {
+      ok: true;
+      packet: TelemetryPacket;
+      warnings: PacketValidationWarning[];
+    }
+  | {
+      ok: false;
+      reason: PacketRejectionReason;
+      severity: LogSeverity;
+      details: string;
+      raw?: unknown;
     };
 
 export type EngineeringLog = {

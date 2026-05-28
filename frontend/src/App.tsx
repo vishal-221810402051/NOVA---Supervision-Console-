@@ -38,10 +38,10 @@ export default function App() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold tracking-widest text-cyan-300">
-                NOVA SC / PHASE 5.5
+                NOVA SC / PHASE 5.6
               </h1>
               <p className="text-xs uppercase tracking-widest text-slate-500">
-                Supervisory Report Export
+                Packet Schema Validator
               </p>
             </div>
 

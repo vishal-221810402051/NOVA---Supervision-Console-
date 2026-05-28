@@ -11,11 +11,16 @@ export function TelemetryStats() {
   const outOfOrderPackets = useTelemetryStore((s) => s.outOfOrderPackets);
   const sequenceResets = useTelemetryStore((s) => s.sequenceResets);
   const sequenceGaps = useTelemetryStore((s) => s.sequenceGaps);
+  const schemaRejectedPackets = useTelemetryStore((s) => s.schemaRejectedPackets);
+  const malformedPackets = useTelemetryStore((s) => s.malformedPackets);
+  const unknownEventPackets = useTelemetryStore((s) => s.unknownEventPackets);
+  const unknownNodePackets = useTelemetryStore((s) => s.unknownNodePackets);
+  const unknownLinkPackets = useTelemetryStore((s) => s.unknownLinkPackets);
   const activeStreamId = useTelemetryStore((s) => s.activeStreamId);
   const streamSwitches = useTelemetryStore((s) => s.streamSwitches);
 
   return (
-    <section className="grid grid-cols-4 gap-3 xl:grid-cols-7">
+    <section className="grid grid-cols-4 gap-3 xl:grid-cols-9">
       <Metric label="Active Stream" value={shortStreamId(activeStreamId)} />
       <Metric label="Stream Switches" value={streamSwitches.toString()} />
       <Metric label="Packet Count" value={packetCount.toString()} />
@@ -26,6 +31,11 @@ export function TelemetryStats() {
       <Metric label="Out-of-Order" value={outOfOrderPackets.toString()} />
       <Metric label="Sequence Resets" value={sequenceResets.toString()} />
       <Metric label="Sequence Gaps" value={sequenceGaps.toString()} />
+      <Metric label="Schema Rejected" value={schemaRejectedPackets.toString()} />
+      <Metric label="Malformed" value={malformedPackets.toString()} />
+      <Metric label="Unknown Events" value={unknownEventPackets.toString()} />
+      <Metric label="Unknown Nodes" value={unknownNodePackets.toString()} />
+      <Metric label="Unknown Links" value={unknownLinkPackets.toString()} />
       <Metric label="Last Packet UTC" value={lastPacketAt ?? "NO PACKET"} />
       <Metric label="Healthy Devices" value={registrySummary.healthy.toString()} />
       <Metric label="Offline Devices" value={registrySummary.offline.toString()} />

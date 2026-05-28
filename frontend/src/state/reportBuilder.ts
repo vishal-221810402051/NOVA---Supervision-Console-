@@ -106,6 +106,11 @@ export type NovaScValidationReport = {
     sequence_resets: number;
     missed_packets: number;
     stream_switches: number;
+    schema_rejected_packets: number;
+    malformed_packets: number;
+    unknown_event_packets: number;
+    unknown_node_packets: number;
+    unknown_link_packets: number;
   };
   chip_status_summary: Record<string, unknown>;
   power_health_summary: Record<string, unknown>;
@@ -143,6 +148,11 @@ export function buildNovaScValidationReport(params: {
   outOfOrderPackets: number;
   sequenceResets: number;
   sequenceGaps: number;
+  schemaRejectedPackets: number;
+  malformedPackets: number;
+  unknownEventPackets: number;
+  unknownNodePackets: number;
+  unknownLinkPackets: number;
   lastPacketAt: string | null;
   logs: EngineeringLog[];
 }): NovaScValidationReport {
@@ -272,6 +282,11 @@ export function buildNovaScValidationReport(params: {
       sequence_resets: params.sequenceResets,
       missed_packets: params.missedPackets,
       stream_switches: params.streamSwitches,
+      schema_rejected_packets: params.schemaRejectedPackets,
+      malformed_packets: params.malformedPackets,
+      unknown_event_packets: params.unknownEventPackets,
+      unknown_node_packets: params.unknownNodePackets,
+      unknown_link_packets: params.unknownLinkPackets,
     },
     chip_status_summary: buildChipStatusSummary(params.deviceRegistry),
     power_health_summary: buildPowerHealthSummary(params.deviceRegistry),

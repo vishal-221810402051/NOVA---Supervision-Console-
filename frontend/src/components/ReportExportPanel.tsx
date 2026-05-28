@@ -23,6 +23,11 @@ export function ReportExportPanel() {
   const outOfOrderPackets = useTelemetryStore((s) => s.outOfOrderPackets);
   const sequenceResets = useTelemetryStore((s) => s.sequenceResets);
   const sequenceGaps = useTelemetryStore((s) => s.sequenceGaps);
+  const schemaRejectedPackets = useTelemetryStore((s) => s.schemaRejectedPackets);
+  const malformedPackets = useTelemetryStore((s) => s.malformedPackets);
+  const unknownEventPackets = useTelemetryStore((s) => s.unknownEventPackets);
+  const unknownNodePackets = useTelemetryStore((s) => s.unknownNodePackets);
+  const unknownLinkPackets = useTelemetryStore((s) => s.unknownLinkPackets);
   const lastPacketAt = useTelemetryStore((s) => s.lastPacketAt);
   const logs = useTelemetryStore((s) => s.logs);
 
@@ -46,6 +51,11 @@ export function ReportExportPanel() {
       outOfOrderPackets,
       sequenceResets,
       sequenceGaps,
+      schemaRejectedPackets,
+      malformedPackets,
+      unknownEventPackets,
+      unknownNodePackets,
+      unknownLinkPackets,
       lastPacketAt,
       logs,
     });

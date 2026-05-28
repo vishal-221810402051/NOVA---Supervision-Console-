@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useTelemetryStore } from "../store/telemetryStore";
-import type { TelemetryPacket } from "../types/telemetry";
+import { validateTelemetryPacket } from "../state/packetValidator";
 
 const TELEMETRY_WS_URL = "ws://127.0.0.1:8000/ws/telemetry";
 const RECONNECT_DELAY_MS = 2000;
@@ -10,27 +10,6 @@ let reconnectTimer: number | null = null;
 let agingTimer: number | null = null;
 let activeSessionId = 0;
 let subscriberCount = 0;
-
-function isValidTelemetryPacket(packet: unknown): packet is TelemetryPacket {
-  if (!packet || typeof packet !== "object") return false;
-
-  const p = packet as Partial<TelemetryPacket>;
-
-  return (
-    p.schema_version === "v1.0" &&
-    typeof p.stream_id === "string" &&
-    typeof p.global_sequence_number === "number" &&
-    typeof p.source_node_id === "string" &&
-    typeof p.source_sequence_number === "number" &&
-    typeof p.producer_timestamp_utc === "string" &&
-    typeof p.supervisor_received_utc === "string" &&
-    typeof p.timestamp_utc === "string" &&
-    typeof p.sequence_number === "number" &&
-    typeof p.node_id === "string" &&
-    typeof p.event_type === "string" &&
-    typeof p.payload === "object"
-  );
-}
 
 function clearReconnectTimer() {
   if (reconnectTimer !== null) {
@@ -93,12 +72,21 @@ function connectTelemetrySocket(sessionId: number) {
 
     try {
       const parsed = JSON.parse(event.data);
+      const validation = validateTelemetryPacket(parsed);
 
-      if (isValidTelemetryPacket(parsed)) {
-        useTelemetryStore.getState().ingestPacket(parsed);
+      if (validation.ok) {
+        useTelemetryStore.getState().ingestPacket(validation.packet);
+      } else {
+        useTelemetryStore.getState().recordPacketRejection(validation);
       }
     } catch {
-      useTelemetryStore.getState().setConnectionState("RECONNECTING");
+      useTelemetryStore.getState().recordPacketRejection({
+        ok: false,
+        reason: "INVALID_JSON",
+        severity: "ERROR",
+        details: "WebSocket message was not valid JSON",
+        raw: event.data,
+      });
     }
   };
 
