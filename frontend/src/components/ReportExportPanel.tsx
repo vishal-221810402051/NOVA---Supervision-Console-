@@ -6,6 +6,9 @@ import {
 
 export function ReportExportPanel() {
   const deviceRegistry = useTelemetryStore((s) => s.deviceRegistry);
+  const linkRegistry = useTelemetryStore((s) => s.linkRegistry);
+  const linkRegistrySummary = useTelemetryStore((s) => s.linkRegistrySummary);
+  const gatewayHealth = useTelemetryStore((s) => s.gatewayHealth);
   const globalHealth = useTelemetryStore((s) => s.globalHealth);
   const connectionState = useTelemetryStore((s) => s.connectionState);
   const isTelemetryStale = useTelemetryStore((s) => s.isTelemetryStale);
@@ -26,6 +29,9 @@ export function ReportExportPanel() {
   const handleDownload = () => {
     const report = buildNovaScValidationReport({
       deviceRegistry,
+      linkRegistry,
+      linkRegistrySummary,
+      gatewayHealth,
       globalHealth,
       connectionState,
       isTelemetryStale,
@@ -52,10 +58,10 @@ export function ReportExportPanel() {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h2 className="text-sm font-bold uppercase tracking-widest text-cyan-300">
-            V1 Validation Report Export
+            V1+ Supervisory Report Export
           </h2>
           <p className="text-xs uppercase tracking-widest text-slate-500">
-            Export current health check, device registry, telemetry stats, and logs
+            Topology, gateway, link, stream, integrity, validation, and registry evidence
           </p>
         </div>
 
@@ -63,15 +69,18 @@ export function ReportExportPanel() {
           onClick={handleDownload}
           className="border border-cyan-500 bg-cyan-950/30 px-5 py-3 text-xs font-bold uppercase tracking-widest text-cyan-200 hover:bg-cyan-900/40"
         >
-          Download JSON Report
+          Download Supervisory JSON Report
         </button>
       </div>
 
-      <div className="grid grid-cols-4 gap-3 text-xs">
-        <Metric label="Report Type" value="V1 Health Check" />
+      <div className="grid grid-cols-1 gap-3 text-xs md:grid-cols-2 xl:grid-cols-4">
+        <Metric label="Report Type" value="Supervisory Validation" />
         <Metric label="Format" value="JSON" />
-        <Metric label="Scope" value="Health + Chip Status" />
+        <Metric label="Scope" value="Topology + Gateway + Links + Stream + Devices" />
         <Metric label="Includes Logs" value="Last 50 Events" />
+        <Metric label="Simulator Mode" value="TRUE" />
+        <Metric label="Hardware Connected" value="FALSE" />
+        <Metric label="Physical Hardware Validation" value="FALSE" />
       </div>
     </section>
   );
