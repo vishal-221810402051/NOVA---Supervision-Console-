@@ -8,10 +8,48 @@ export type ConnectionState =
 
 export type LogSeverity = "INFO" | "WARNING" | "ERROR" | "CRITICAL";
 
+export type NodeId =
+  | "laptop_console"
+  | "pi_gateway"
+  | "esp32_motion"
+  | "esp32_qc";
+
+export type NodeRole =
+  | "SUPERVISION_CONSOLE"
+  | "GATEWAY"
+  | "MOTION_CONTROL"
+  | "SAFETY_QC";
+
+export type LinkId =
+  | "link_laptop_pi"
+  | "link_pi_main"
+  | "link_main_sub";
+
+export type LinkState =
+  | "LINK_HEALTHY"
+  | "LINK_DEGRADED"
+  | "LINK_OFFLINE"
+  | "LINK_RECOVERING";
+
+export type SyncState =
+  | "SYNCED"
+  | "DESYNCED"
+  | "UNKNOWN";
+
+export type TransportKind =
+  | "WEBSOCKET"
+  | "UART"
+  | "WIFI"
+  | "UNKNOWN";
+
 export type EventType =
   | "SYSTEM_HEALTH_TELEMETRY"
   | "CHIP_STATUS_TELEMETRY"
-  | "POWER_HEALTH_TELEMETRY";
+  | "POWER_HEALTH_TELEMETRY"
+  | "GATEWAY_HEALTH_TELEMETRY"
+  | "LINK_HEARTBEAT_TELEMETRY"
+  | "LINK_SYNC_TELEMETRY"
+  | "NODE_HEALTH_TELEMETRY";
 
 export type MainMcuHealth = {
   node_id: "esp32_motion";
@@ -71,6 +109,54 @@ export type PowerHealthPayload = {
   power_state: HealthState;
 };
 
+export type GatewayHealthPayload = {
+  node_id: "pi_gateway";
+  health_state: HealthState;
+  uptime_ms: number;
+  cpu_percent: number;
+  memory_used_percent: number;
+  disk_used_percent: number;
+  buffer_depth: number;
+  dropped_packets: number;
+  status_message: string;
+};
+
+export type LinkHeartbeatPayload = {
+  link_id: LinkId;
+  source_node_id: NodeId;
+  target_node_id: NodeId;
+  heartbeat_sequence_number: number;
+  heartbeat_interval_ms: number;
+  timeout_ms: number;
+  missed_heartbeat_count: number;
+  missed_heartbeat_threshold: number;
+  link_state: LinkState;
+  sync_state: SyncState;
+  last_seen_utc: string;
+  round_trip_latency_ms: number | null;
+};
+
+export type LinkSyncPayload = {
+  link_id: LinkId;
+  source_node_id: NodeId;
+  target_node_id: NodeId;
+  sync_state: SyncState;
+  clock_skew_ms: number | null;
+  stream_consistent: boolean;
+  source_sequence_continuous: boolean;
+};
+
+export type NodeHealthPayload = {
+  node_id: NodeId;
+  role: NodeRole;
+  health_state: HealthState;
+  uptime_ms: number;
+  software_version?: string;
+  firmware_version?: string;
+  reset_reason?: string;
+  status_message: string;
+};
+
 export type TelemetryPacket =
   | {
       schema_version: string;
@@ -116,6 +202,66 @@ export type TelemetryPacket =
       node_id: string;
       event_type: "POWER_HEALTH_TELEMETRY";
       payload: PowerHealthPayload;
+    }
+  | {
+      schema_version: string;
+      stream_id: string;
+      global_sequence_number: number;
+      source_node_id: string;
+      source_sequence_number: number;
+      producer_timestamp_utc: string;
+      supervisor_received_utc: string;
+      timestamp_utc: string;
+      sequence_number: number;
+      run_id: string;
+      node_id: string;
+      event_type: "GATEWAY_HEALTH_TELEMETRY";
+      payload: GatewayHealthPayload;
+    }
+  | {
+      schema_version: string;
+      stream_id: string;
+      global_sequence_number: number;
+      source_node_id: string;
+      source_sequence_number: number;
+      producer_timestamp_utc: string;
+      supervisor_received_utc: string;
+      timestamp_utc: string;
+      sequence_number: number;
+      run_id: string;
+      node_id: string;
+      event_type: "LINK_HEARTBEAT_TELEMETRY";
+      payload: LinkHeartbeatPayload;
+    }
+  | {
+      schema_version: string;
+      stream_id: string;
+      global_sequence_number: number;
+      source_node_id: string;
+      source_sequence_number: number;
+      producer_timestamp_utc: string;
+      supervisor_received_utc: string;
+      timestamp_utc: string;
+      sequence_number: number;
+      run_id: string;
+      node_id: string;
+      event_type: "LINK_SYNC_TELEMETRY";
+      payload: LinkSyncPayload;
+    }
+  | {
+      schema_version: string;
+      stream_id: string;
+      global_sequence_number: number;
+      source_node_id: string;
+      source_sequence_number: number;
+      producer_timestamp_utc: string;
+      supervisor_received_utc: string;
+      timestamp_utc: string;
+      sequence_number: number;
+      run_id: string;
+      node_id: string;
+      event_type: "NODE_HEALTH_TELEMETRY";
+      payload: NodeHealthPayload;
     };
 
 export type EngineeringLog = {

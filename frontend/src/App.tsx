@@ -11,6 +11,7 @@ import { DeviceRegistryPanel } from "./components/DeviceRegistryPanel";
 import { GlobalStatusBar } from "./components/GlobalStatusBar";
 import { HealthCheckPanel } from "./components/HealthCheckPanel";
 import { ReportExportPanel } from "./components/ReportExportPanel";
+import { TopologyView } from "./components/TopologyView";
 
 type Page =
   | "overview"
@@ -19,7 +20,8 @@ type Page =
   | "logs"
   | "registry"
   | "health"
-  | "report";
+  | "report"
+  | "topology";
 
 export default function App() {
   useTelemetrySocket();
@@ -36,10 +38,10 @@ export default function App() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold tracking-widest text-cyan-300">
-                NOVA SC / PHASE 5.0C
+                NOVA SC / PHASE 5.1
               </h1>
               <p className="text-xs uppercase tracking-widest text-slate-500">
-                Multi-Domain Telemetry Metadata
+                Pi Gateway Topology Foundation
               </p>
             </div>
 
@@ -64,6 +66,7 @@ export default function App() {
           <TelemetryStats />
 
           {activePage === "overview" && <SystemOverview />}
+          {activePage === "topology" && <TopologyView />}
           {activePage === "chips" && <ChipStatus />}
           {activePage === "power" && <PowerHealth />}
           {activePage === "logs" && <EngineeringLogs />}

@@ -5,7 +5,8 @@ type Page =
   | "logs"
   | "registry"
   | "health"
-  | "report";
+  | "report"
+  | "topology";
 
 type Props = {
   activePage: Page;
@@ -14,6 +15,7 @@ type Props = {
 
 const items: { id: Page; label: string }[] = [
   { id: "overview", label: "System Overview" },
+  { id: "topology", label: "Topology" },
   { id: "chips", label: "Chip Status" },
   { id: "power", label: "Power Health" },
   { id: "logs", label: "Engineering Logs" },

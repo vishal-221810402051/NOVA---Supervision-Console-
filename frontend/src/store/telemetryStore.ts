@@ -3,6 +3,7 @@ import type {
   ChipStatusPayload,
   ConnectionState,
   EngineeringLog,
+  GatewayHealthPayload,
   PowerHealthPayload,
   SystemHealthPayload,
   TelemetryPacket,
@@ -17,6 +18,13 @@ import {
   updateRegistryFromSystemHealth,
   type DeviceRegistry,
 } from "../state/deviceRegistry";
+import {
+  createInitialLinkRegistry,
+  getLinkRegistrySummary,
+  updateLinkRegistryFromHeartbeat,
+  updateLinkRegistryFromSync,
+  type LinkRegistry,
+} from "../state/linkRegistry";
 
 type TelemetryState = {
   connectionState: ConnectionState;
@@ -38,8 +46,11 @@ type TelemetryState = {
   systemHealth: SystemHealthPayload | null;
   chipStatus: ChipStatusPayload | null;
   powerHealth: PowerHealthPayload | null;
+  gatewayHealth: GatewayHealthPayload | null;
   deviceRegistry: DeviceRegistry;
   registrySummary: ReturnType<typeof getRegistrySummary>;
+  linkRegistry: LinkRegistry;
+  linkRegistrySummary: ReturnType<typeof getLinkRegistrySummary>;
   globalHealth: ReturnType<typeof getGlobalSystemHealth>;
   isTelemetryStale: boolean;
   logs: EngineeringLog[];
@@ -89,8 +100,11 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   systemHealth: null,
   chipStatus: null,
   powerHealth: null,
+  gatewayHealth: null,
   deviceRegistry: createInitialDeviceRegistry(),
   registrySummary: getRegistrySummary(createInitialDeviceRegistry()),
+  linkRegistry: createInitialLinkRegistry(),
+  linkRegistrySummary: getLinkRegistrySummary(createInitialLinkRegistry()),
   globalHealth: getGlobalSystemHealth(createInitialDeviceRegistry()),
   isTelemetryStale: false,
   logs: [],
@@ -231,6 +245,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           : 0;
 
       let deviceRegistry = state.deviceRegistry;
+      let linkRegistry = state.linkRegistry;
 
       if (packet.event_type === "SYSTEM_HEALTH_TELEMETRY") {
         deviceRegistry = updateRegistryFromSystemHealth(
@@ -253,6 +268,20 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           deviceRegistry,
           packet.payload,
           packet.timestamp_utc
+        );
+      }
+
+      if (packet.event_type === "LINK_HEARTBEAT_TELEMETRY") {
+        linkRegistry = updateLinkRegistryFromHeartbeat(
+          linkRegistry,
+          packet.payload
+        );
+      }
+
+      if (packet.event_type === "LINK_SYNC_TELEMETRY") {
+        linkRegistry = updateLinkRegistryFromSync(
+          linkRegistry,
+          packet.payload
         );
       }
 
@@ -340,8 +369,14 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           packet.event_type === "POWER_HEALTH_TELEMETRY"
             ? packet.payload
             : state.powerHealth,
+        gatewayHealth:
+          packet.event_type === "GATEWAY_HEALTH_TELEMETRY"
+            ? packet.payload
+            : state.gatewayHealth,
         deviceRegistry,
         registrySummary: getRegistrySummary(deviceRegistry),
+        linkRegistry,
+        linkRegistrySummary: getLinkRegistrySummary(linkRegistry),
         globalHealth: getGlobalSystemHealth(deviceRegistry),
         isTelemetryStale: false,
         logs: [...anomalyLogs, normalLog, ...state.logs].slice(0, 100),

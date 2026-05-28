@@ -19,8 +19,14 @@ STREAM_ID = "SIM_STREAM_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"
 GLOBAL_SEQUENCE_NUMBER = 0
 SOURCE_SEQUENCE_COUNTERS = {
     "laptop_console": 0,
+    "pi_gateway": 0,
     "esp32_motion": 0,
     "esp32_qc": 0,
+}
+LINK_HEARTBEAT_COUNTERS = {
+    "link_laptop_pi": 0,
+    "link_pi_main": 0,
+    "link_main_sub": 0,
 }
 
 
@@ -39,6 +45,11 @@ def next_global_sequence():
     return GLOBAL_SEQUENCE_NUMBER
 
 
+def next_link_heartbeat_sequence(link_id: str):
+    LINK_HEARTBEAT_COUNTERS[link_id] = LINK_HEARTBEAT_COUNTERS.get(link_id, 0) + 1
+    return LINK_HEARTBEAT_COUNTERS[link_id]
+
+
 def build_packet_metadata(global_sequence_number: int, source_node_id: str):
     producer_timestamp_utc = utc_now()
     supervisor_received_utc = utc_now()
@@ -55,6 +66,73 @@ def build_packet_metadata(global_sequence_number: int, source_node_id: str):
         "sequence_number": global_sequence_number,
         "run_id": "NOVA_SC_PHASE_5_0C",
         "node_id": source_node_id,
+    }
+
+
+def build_gateway_health_packet(global_sequence_number: int):
+    source_node_id = "pi_gateway"
+    return {
+        **build_packet_metadata(global_sequence_number, source_node_id),
+        "event_type": "GATEWAY_HEALTH_TELEMETRY",
+        "payload": {
+            "node_id": "pi_gateway",
+            "health_state": "HEALTHY",
+            "uptime_ms": global_sequence_number * 1000,
+            "cpu_percent": round(random.uniform(8.0, 28.0), 2),
+            "memory_used_percent": round(random.uniform(22.0, 48.0), 2),
+            "disk_used_percent": round(random.uniform(12.0, 31.0), 2),
+            "buffer_depth": random.randint(0, 3),
+            "dropped_packets": 0,
+            "status_message": "Gateway simulator healthy",
+        },
+    }
+
+
+def build_link_heartbeat_packet(
+    global_sequence_number: int,
+    link_id: str,
+    source_node_id: str,
+    target_node_id: str,
+    heartbeat_interval_ms: int,
+):
+    return {
+        **build_packet_metadata(global_sequence_number, source_node_id),
+        "event_type": "LINK_HEARTBEAT_TELEMETRY",
+        "payload": {
+            "link_id": link_id,
+            "source_node_id": source_node_id,
+            "target_node_id": target_node_id,
+            "heartbeat_sequence_number": next_link_heartbeat_sequence(link_id),
+            "heartbeat_interval_ms": heartbeat_interval_ms,
+            "timeout_ms": 6000,
+            "missed_heartbeat_count": 0,
+            "missed_heartbeat_threshold": 3,
+            "link_state": "LINK_HEALTHY",
+            "sync_state": "SYNCED",
+            "last_seen_utc": utc_now(),
+            "round_trip_latency_ms": random.randint(2, 18),
+        },
+    }
+
+
+def build_link_sync_packet(
+    global_sequence_number: int,
+    link_id: str,
+    source_node_id: str,
+    target_node_id: str,
+):
+    return {
+        **build_packet_metadata(global_sequence_number, source_node_id),
+        "event_type": "LINK_SYNC_TELEMETRY",
+        "payload": {
+            "link_id": link_id,
+            "source_node_id": source_node_id,
+            "target_node_id": target_node_id,
+            "sync_state": "SYNCED",
+            "clock_skew_ms": random.randint(0, 4),
+            "stream_consistent": True,
+            "source_sequence_continuous": True,
+        },
     }
 
 
@@ -154,6 +232,61 @@ async def telemetry_ws(websocket: WebSocket):
 
     while True:
         packets = []
+
+        packets.append(build_gateway_health_packet(next_global_sequence()))
+
+        packets.append(
+            build_link_heartbeat_packet(
+                next_global_sequence(),
+                "link_laptop_pi",
+                "pi_gateway",
+                "laptop_console",
+                1000,
+            )
+        )
+        packets.append(
+            build_link_heartbeat_packet(
+                next_global_sequence(),
+                "link_pi_main",
+                "pi_gateway",
+                "esp32_motion",
+                500,
+            )
+        )
+        packets.append(
+            build_link_heartbeat_packet(
+                next_global_sequence(),
+                "link_main_sub",
+                "esp32_motion",
+                "esp32_qc",
+                500,
+            )
+        )
+
+        packets.append(
+            build_link_sync_packet(
+                next_global_sequence(),
+                "link_laptop_pi",
+                "pi_gateway",
+                "laptop_console",
+            )
+        )
+        packets.append(
+            build_link_sync_packet(
+                next_global_sequence(),
+                "link_pi_main",
+                "pi_gateway",
+                "esp32_motion",
+            )
+        )
+        packets.append(
+            build_link_sync_packet(
+                next_global_sequence(),
+                "link_main_sub",
+                "esp32_motion",
+                "esp32_qc",
+            )
+        )
 
         packets.append(build_health_packet(next_global_sequence()))
 
