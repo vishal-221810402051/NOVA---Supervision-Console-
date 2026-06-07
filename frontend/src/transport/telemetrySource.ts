@@ -27,6 +27,29 @@ export type RawTelemetrySourceContext = {
   is_simulated: boolean;
 };
 
+export const DEFAULT_TELEMETRY_WS_URL =
+  "ws://127.0.0.1:8000/ws/telemetry";
+
+function resolveTelemetryWsUrl() {
+  const configuredUrl = import.meta.env.VITE_NOVA_SC_WS_URL?.trim();
+
+  if (!configuredUrl) {
+    return DEFAULT_TELEMETRY_WS_URL;
+  }
+
+  try {
+    const parsedUrl = new URL(configuredUrl);
+
+    if (parsedUrl.protocol === "ws:" || parsedUrl.protocol === "wss:") {
+      return configuredUrl;
+    }
+  } catch {
+    return DEFAULT_TELEMETRY_WS_URL;
+  }
+
+  return DEFAULT_TELEMETRY_WS_URL;
+}
+
 export const SIMULATOR_WEBSOCKET_SOURCE: Omit<
   TelemetrySourceStatus,
   "connection_state" | "last_connected_utc" | "last_error" | "reconnect_attempts"
@@ -34,6 +57,6 @@ export const SIMULATOR_WEBSOCKET_SOURCE: Omit<
   source_id: "simulator_websocket",
   display_name: "Simulator WebSocket",
   transport_kind: "WEBSOCKET",
-  endpoint: "ws://127.0.0.1:8000/ws/telemetry",
+  endpoint: resolveTelemetryWsUrl(),
   is_simulated: true,
 };
