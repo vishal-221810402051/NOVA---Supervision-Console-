@@ -2,7 +2,14 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone
 import asyncio
+import os
 import random
+
+from gateway_state import GatewayState
+from protocol import (
+    build_gateway_health_packet as build_hardware_gateway_health_packet,
+)
+from serial_bridge import SerialBridge
 
 app = FastAPI(title="NOVA SC Backend", version="0.1.0")
 
@@ -13,6 +20,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+BACKEND_MODE = os.getenv("NOVA_SC_BACKEND_MODE", "simulator").strip().lower()
+if BACKEND_MODE not in {"simulator", "hardware"}:
+    BACKEND_MODE = "simulator"
+
+SERIAL_PORT = os.getenv("NOVA_SC_SERIAL_PORT")
+try:
+    SERIAL_BAUD = int(os.getenv("NOVA_SC_SERIAL_BAUD", "115200"))
+except ValueError:
+    SERIAL_BAUD = 115200
+
+hardware_gateway_state = GatewayState(
+    mode=BACKEND_MODE,
+    stream_prefix="PI_STREAM",
+    serial_port=SERIAL_PORT,
+    baud=SERIAL_BAUD,
+)
+hardware_packet_queue: asyncio.Queue[dict] = asyncio.Queue()
+serial_bridge: SerialBridge | None = None
 
 NODE_IDS = {
     "LAPTOP_CONSOLE": "laptop_console",
@@ -40,6 +66,32 @@ LINK_HEARTBEAT_COUNTERS = {
     LINK_IDS["PI_MAIN"]: 0,
     LINK_IDS["MAIN_SUB"]: 0,
 }
+
+
+@app.on_event("startup")
+async def startup():
+    global serial_bridge
+    if BACKEND_MODE != "hardware":
+        hardware_gateway_state.set_serial_status(
+            serial_connected=False,
+            hardware_connected=False,
+            bridge_status="DISABLED",
+        )
+        return
+
+    serial_bridge = SerialBridge(
+        state=hardware_gateway_state,
+        output_queue=hardware_packet_queue,
+        serial_port=SERIAL_PORT,
+        baud=SERIAL_BAUD,
+    )
+    serial_bridge.start()
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    if serial_bridge is not None:
+        await serial_bridge.stop()
 
 
 def utc_now():
@@ -268,7 +320,37 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"backend": "HEALTHY", "websocket": "/ws/telemetry", "stream_id": STREAM_ID}
+    hardware_status = hardware_gateway_state.to_health_status()
+    active_stream_id = (
+        hardware_status["stream_id"] if BACKEND_MODE == "hardware" else STREAM_ID
+    )
+    return {
+        "backend": "HEALTHY",
+        "websocket": "/ws/telemetry",
+        "stream_id": active_stream_id,
+        "backend_mode": BACKEND_MODE,
+        "bridge_status": hardware_status["bridge_status"],
+        "serial_port": hardware_status["serial_port"],
+        "baud": hardware_status["baud"],
+        "serial_connected": hardware_status["serial_connected"],
+        "hardware_connected": hardware_status["hardware_connected"],
+        "malformed_packet_count": hardware_status["malformed_packet_count"],
+        "dropped_packet_count": hardware_status["dropped_packet_count"],
+        "last_esp32_main_packet_utc": hardware_status["last_esp32_main_packet_utc"],
+        "last_esp32_sub_packet_utc": hardware_status["last_esp32_sub_packet_utc"],
+        "last_error": hardware_status["last_error"],
+    }
+
+
+async def stream_hardware_packets(websocket: WebSocket):
+    while True:
+        try:
+            packet = await asyncio.wait_for(hardware_packet_queue.get(), timeout=1)
+            await websocket.send_json(packet)
+        except asyncio.TimeoutError:
+            await websocket.send_json(
+                build_hardware_gateway_health_packet(hardware_gateway_state)
+            )
 
 
 @app.websocket("/ws/telemetry")
@@ -276,6 +358,10 @@ async def telemetry_ws(websocket: WebSocket):
     await websocket.accept()
 
     try:
+        if BACKEND_MODE == "hardware":
+            await stream_hardware_packets(websocket)
+            return
+
         while True:
             packets = []
 
