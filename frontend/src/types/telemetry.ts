@@ -11,8 +11,40 @@ export type LogSeverity = "INFO" | "WARNING" | "ERROR" | "CRITICAL";
 export type NodeId =
   | "laptop_console"
   | "pi_gateway"
+  | "esp32_main"
+  | "esp32_sub";
+
+export type LegacyNodeId =
   | "esp32_motion"
   | "esp32_qc";
+
+export type AcceptedNodeId = NodeId | LegacyNodeId;
+
+export const LEGACY_NODE_ALIASES: Record<LegacyNodeId, NodeId> = {
+  esp32_motion: "esp32_main",
+  esp32_qc: "esp32_sub",
+};
+
+export function normalizeNodeId(nodeId: AcceptedNodeId): NodeId {
+  return LEGACY_NODE_ALIASES[nodeId as LegacyNodeId] ?? (nodeId as NodeId);
+}
+
+export function isCanonicalNodeId(value: unknown): value is NodeId {
+  return (
+    value === "laptop_console" ||
+    value === "pi_gateway" ||
+    value === "esp32_main" ||
+    value === "esp32_sub"
+  );
+}
+
+export function isAcceptedNodeId(value: unknown): value is AcceptedNodeId {
+  return (
+    isCanonicalNodeId(value) ||
+    value === "esp32_motion" ||
+    value === "esp32_qc"
+  );
+}
 
 export type NodeRole =
   | "SUPERVISION_CONSOLE"
@@ -53,7 +85,7 @@ export type EventType =
   | "TELEMETRY_INTEGRITY_EVENT";
 
 export type MainMcuHealth = {
-  node_id: "esp32_motion";
+  node_id: AcceptedNodeId;
   health_state: HealthState;
   uptime_ms: number;
   firmware_version: string;
@@ -63,7 +95,7 @@ export type MainMcuHealth = {
 };
 
 export type SubMcuHealth = {
-  node_id: "esp32_qc";
+  node_id: AcceptedNodeId;
   health_state: HealthState;
   uptime_ms: number;
   firmware_version: string;
@@ -188,7 +220,7 @@ export type TelemetryIntegrityEventPayload = {
     | "MALFORMED_PACKET";
   severity: LogSeverity;
   affected_stream_id: string | null;
-  affected_source_node_id: string | null;
+  affected_source_node_id: NodeId | null;
   affected_sequence_number: number | null;
   details: string;
 };

@@ -5,6 +5,7 @@ import type {
   HealthCheckRule,
   TelemetryPacket,
 } from "../types/telemetry";
+import { isAcceptedNodeId, normalizeNodeId } from "../types/telemetry";
 import {
   createInitialDeviceRegistry,
   getGlobalSystemHealth,
@@ -344,67 +345,105 @@ function applyAcceptedPacketToReplayState(
   packet: TelemetryPacket,
   state: ReplayWorkingState
 ) {
+  const replayPacket = normalizeReplayPacket(packet);
   state.packetCount += 1;
-  state.activeStreamId = packet.stream_id;
-  state.sourceSequences[`${packet.stream_id}:${packet.source_node_id}`] =
-    packet.source_sequence_number;
+  state.activeStreamId = replayPacket.stream_id;
+  state.sourceSequences[`${replayPacket.stream_id}:${replayPacket.source_node_id}`] =
+    replayPacket.source_sequence_number;
   state.lastAcceptedSequenceNumber =
-    packet.global_sequence_number ?? packet.sequence_number;
+    replayPacket.global_sequence_number ?? replayPacket.sequence_number;
 
-  const packetTimestampMs = new Date(packet.timestamp_utc).getTime();
+  const packetTimestampMs = new Date(replayPacket.timestamp_utc).getTime();
   if (Number.isFinite(packetTimestampMs)) {
     state.acceptedPacketTimestamps.push(packetTimestampMs);
   }
 
-  if (packet.event_type === "SYSTEM_HEALTH_TELEMETRY") {
+  if (replayPacket.event_type === "SYSTEM_HEALTH_TELEMETRY") {
     state.deviceRegistry = updateRegistryFromSystemHealth(
       state.deviceRegistry,
-      packet.payload,
-      packet.timestamp_utc
+      replayPacket.payload,
+      replayPacket.timestamp_utc
     );
   }
 
-  if (packet.event_type === "CHIP_STATUS_TELEMETRY") {
+  if (replayPacket.event_type === "CHIP_STATUS_TELEMETRY") {
     state.deviceRegistry = updateRegistryFromChipStatus(
       state.deviceRegistry,
-      packet.payload,
-      packet.timestamp_utc
+      replayPacket.payload,
+      replayPacket.timestamp_utc
     );
   }
 
-  if (packet.event_type === "POWER_HEALTH_TELEMETRY") {
+  if (replayPacket.event_type === "POWER_HEALTH_TELEMETRY") {
     state.deviceRegistry = updateRegistryFromPowerHealth(
       state.deviceRegistry,
-      packet.payload,
-      packet.timestamp_utc
+      replayPacket.payload,
+      replayPacket.timestamp_utc
     );
   }
 
-  if (packet.event_type === "NODE_HEALTH_TELEMETRY") {
+  if (replayPacket.event_type === "NODE_HEALTH_TELEMETRY") {
     state.deviceRegistry = updateRegistryFromNodeHealth(
       state.deviceRegistry,
-      packet.payload,
-      packet.timestamp_utc
+      replayPacket.payload,
+      replayPacket.timestamp_utc
     );
   }
 
-  if (packet.event_type === "GATEWAY_HEALTH_TELEMETRY") {
-    state.gatewayHealth = packet.payload;
+  if (replayPacket.event_type === "GATEWAY_HEALTH_TELEMETRY") {
+    state.gatewayHealth = replayPacket.payload;
   }
 
-  if (packet.event_type === "LINK_HEARTBEAT_TELEMETRY") {
+  if (replayPacket.event_type === "LINK_HEARTBEAT_TELEMETRY") {
     state.linkRegistry = updateLinkRegistryFromHeartbeat(
       state.linkRegistry,
-      packet.payload
+      replayPacket.payload
     );
   }
 
-  if (packet.event_type === "LINK_SYNC_TELEMETRY") {
+  if (replayPacket.event_type === "LINK_SYNC_TELEMETRY") {
     state.linkRegistry = updateLinkRegistryFromSync(
       state.linkRegistry,
-      packet.payload
+      replayPacket.payload
     );
   }
+}
+
+function normalizeReplayPacket(packet: TelemetryPacket): TelemetryPacket {
+  const normalizedPacket = {
+    ...packet,
+    source_node_id: normalizeReplayNodeField(packet.source_node_id),
+    node_id: normalizeReplayNodeField(packet.node_id),
+    payload: normalizeReplayPayload(packet),
+  };
+
+  return normalizedPacket as TelemetryPacket;
+}
+
+function normalizeReplayPayload(packet: TelemetryPacket) {
+  const payload = { ...packet.payload } as Record<string, unknown>;
+
+  payload.node_id = normalizeReplayNodeField(payload.node_id);
+  payload.source_node_id = normalizeReplayNodeField(payload.source_node_id);
+  payload.target_node_id = normalizeReplayNodeField(payload.target_node_id);
+  payload.affected_source_node_id = normalizeReplayNodeField(payload.affected_source_node_id);
+
+  if (packet.event_type === "SYSTEM_HEALTH_TELEMETRY") {
+    payload.main_mcu = {
+      ...packet.payload.main_mcu,
+      node_id: normalizeReplayNodeField(packet.payload.main_mcu.node_id),
+    };
+    payload.sub_mcu = {
+      ...packet.payload.sub_mcu,
+      node_id: normalizeReplayNodeField(packet.payload.sub_mcu.node_id),
+    };
+  }
+
+  return payload;
+}
+
+function normalizeReplayNodeField(value: unknown) {
+  return isAcceptedNodeId(value) ? normalizeNodeId(value) : value;
 }
 
 function createInitialDispositionSummary(): ReplayDispositionSummary {

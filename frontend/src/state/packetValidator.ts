@@ -12,13 +12,14 @@ import type {
   SyncState,
   TelemetryPacket,
 } from "../types/telemetry";
+import { isAcceptedNodeId, isCanonicalNodeId, normalizeNodeId } from "../types/telemetry";
 
 const ALLOWED_SCHEMA_VERSIONS = ["v1.0"] as const;
 const ALLOWED_NODE_IDS: NodeId[] = [
   "laptop_console",
   "pi_gateway",
-  "esp32_motion",
-  "esp32_qc",
+  "esp32_main",
+  "esp32_sub",
 ];
 const ALLOWED_LINK_IDS: LinkId[] = [
   "link_laptop_pi",
@@ -53,8 +54,8 @@ const LOG_SEVERITIES: LogSeverity[] = ["INFO", "WARNING", "ERROR", "CRITICAL"];
 
 const LINK_TOPOLOGY: Record<LinkId, { source: NodeId; target: NodeId }> = {
   link_laptop_pi: { source: "pi_gateway", target: "laptop_console" },
-  link_pi_main: { source: "pi_gateway", target: "esp32_motion" },
-  link_main_sub: { source: "esp32_motion", target: "esp32_qc" },
+  link_pi_main: { source: "pi_gateway", target: "esp32_main" },
+  link_main_sub: { source: "esp32_main", target: "esp32_sub" },
 };
 
 type PacketRecord = Record<string, unknown>;
@@ -66,15 +67,16 @@ export function validateTelemetryPacket(raw: unknown): PacketValidationResult {
     return reject("MISSING_REQUIRED_FIELD", "Telemetry packet is not an object", "ERROR", raw);
   }
 
-  const baseResult = validateBaseMetadata(raw, warnings);
+  const normalizedRaw = normalizeTelemetryRecord(raw);
+  const baseResult = validateBaseMetadata(normalizedRaw, warnings);
   if (!baseResult.ok) return baseResult;
 
-  const packet = raw;
+  const packet = normalizedRaw;
   const payload = packet.payload as PacketRecord;
   const eventType = packet.event_type as EventType;
   const sourceNodeId = packet.source_node_id as NodeId;
 
-  const payloadResult = validatePayload(eventType, payload, sourceNodeId, raw);
+  const payloadResult = validatePayload(eventType, payload, sourceNodeId, normalizedRaw);
   if (!payloadResult.ok) return payloadResult;
 
   return {
@@ -82,6 +84,52 @@ export function validateTelemetryPacket(raw: unknown): PacketValidationResult {
     packet: packet as TelemetryPacket,
     warnings,
   };
+}
+
+function normalizeTelemetryRecord(raw: PacketRecord): PacketRecord {
+  const normalized: PacketRecord = {
+    ...raw,
+  };
+
+  normalized.source_node_id = normalizeNodeField(raw.source_node_id);
+  normalized.node_id = normalizeNodeField(raw.node_id);
+
+  if (isRecord(raw.payload)) {
+    normalized.payload = normalizePayloadNodeFields(raw.event_type, raw.payload);
+  }
+
+  return normalized;
+}
+
+function normalizePayloadNodeFields(eventType: unknown, payload: PacketRecord): PacketRecord {
+  const normalizedPayload: PacketRecord = { ...payload };
+
+  normalizedPayload.node_id = normalizeNodeField(payload.node_id);
+  normalizedPayload.source_node_id = normalizeNodeField(payload.source_node_id);
+  normalizedPayload.target_node_id = normalizeNodeField(payload.target_node_id);
+  normalizedPayload.affected_source_node_id = normalizeNodeField(payload.affected_source_node_id);
+
+  if (eventType === "SYSTEM_HEALTH_TELEMETRY") {
+    if (isRecord(payload.main_mcu)) {
+      normalizedPayload.main_mcu = {
+        ...payload.main_mcu,
+        node_id: normalizeNodeField(payload.main_mcu.node_id),
+      };
+    }
+
+    if (isRecord(payload.sub_mcu)) {
+      normalizedPayload.sub_mcu = {
+        ...payload.sub_mcu,
+        node_id: normalizeNodeField(payload.sub_mcu.node_id),
+      };
+    }
+  }
+
+  return normalizedPayload;
+}
+
+function normalizeNodeField(value: unknown) {
+  return isAcceptedNodeId(value) ? normalizeNodeId(value) : value;
 }
 
 function validateBaseMetadata(
@@ -501,7 +549,7 @@ function isLogSeverity(value: unknown): value is LogSeverity {
 }
 
 function isKnownNodeId(value: unknown): value is NodeId {
-  return ALLOWED_NODE_IDS.includes(value as NodeId);
+  return isCanonicalNodeId(value) && ALLOWED_NODE_IDS.includes(value);
 }
 
 function isKnownLinkId(value: unknown): value is LinkId {

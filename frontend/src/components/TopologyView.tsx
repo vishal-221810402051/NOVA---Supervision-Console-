@@ -1,5 +1,6 @@
 import { useTelemetryStore } from "../store/telemetryStore";
 import type { DeviceRegistryEntry } from "../types/telemetry";
+import { isAcceptedNodeId, normalizeNodeId } from "../types/telemetry";
 
 type Severity = "healthy" | "warning" | "critical" | "neutral";
 
@@ -12,11 +13,11 @@ const nodeMeta: Record<string, { label: string; role: string }> = {
     label: "Pi Gateway",
     role: "GATEWAY",
   },
-  esp32_motion: {
+  esp32_main: {
     label: "MAIN ESP32-S3",
     role: "MOTION_CONTROL",
   },
-  esp32_qc: {
+  esp32_sub: {
     label: "SUB ESP32-S3",
     role: "SAFETY_QC",
   },
@@ -37,10 +38,17 @@ export function TopologyView() {
   const streamSwitches = useTelemetryStore((s) => s.streamSwitches);
 
   const links = Object.values(linkRegistry);
-  const getNode = (nodeId: string) =>
+  const getNode = (nodeId: string) => {
+    const canonicalNodeId = isAcceptedNodeId(nodeId) ? normalizeNodeId(nodeId) : nodeId;
+    return (
     Object.values(deviceRegistry).find(
-      (device) => device.node_id === nodeId || device.device_id === nodeId
+      (device) =>
+        device.device_id === canonicalNodeId ||
+        device.node_id === canonicalNodeId ||
+        (isAcceptedNodeId(device.node_id) && normalizeNodeId(device.node_id) === canonicalNodeId)
+    )
     );
+  };
 
   const integrityState =
     outOfOrderPackets > 0
@@ -70,8 +78,8 @@ export function TopologyView() {
       <TopologyChain
         laptop={getNode("laptop_console")}
         piGateway={getNode("pi_gateway")}
-        main={getNode("esp32_motion")}
-        sub={getNode("esp32_qc")}
+        main={getNode("esp32_main")}
+        sub={getNode("esp32_sub")}
         connectionState={connectionState}
         linkLaptopPi={linkRegistry.link_laptop_pi}
         linkPiMain={linkRegistry.link_pi_main}
@@ -158,9 +166,9 @@ function TopologyChain({
         <LinkCard link={linkLaptopPi} />
         <NodeCard nodeId="pi_gateway" device={piGateway} />
         <LinkCard link={linkPiMain} />
-        <NodeCard nodeId="esp32_motion" device={main} />
+        <NodeCard nodeId="esp32_main" device={main} />
         <LinkCard link={linkMainSub} />
-        <NodeCard nodeId="esp32_qc" device={sub} />
+        <NodeCard nodeId="esp32_sub" device={sub} />
       </div>
     </section>
   );

@@ -289,8 +289,8 @@ export function buildNovaScValidationReport(params: {
       canonical_chain: [
         "laptop_console",
         "pi_gateway",
-        "esp32_motion",
-        "esp32_qc",
+        "esp32_main",
+        "esp32_sub",
       ],
       canonical_links: [
         "link_laptop_pi",
@@ -398,8 +398,8 @@ function buildNodeSummary(params: {
       status_message:
         params.gatewayHealth?.status_message ?? piGateway?.status_message ?? null,
     },
-    esp32_motion: summarizeNode("MOTION_CONTROL", DEVICE_IDS.MAIN_MCU, mainMcu),
-    esp32_qc: summarizeNode("SAFETY_QC", DEVICE_IDS.SUB_MCU, subMcu),
+    esp32_main: summarizeNode("MOTION_CONTROL", DEVICE_IDS.MAIN_MCU, mainMcu),
+    esp32_sub: summarizeNode("SAFETY_QC", DEVICE_IDS.SUB_MCU, subMcu),
   };
 }
 

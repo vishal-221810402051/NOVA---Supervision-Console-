@@ -1,4 +1,5 @@
 import { useTelemetryStore } from "../store/telemetryStore";
+import { isAcceptedNodeId, normalizeNodeId } from "../types/telemetry";
 
 export function EngineeringLogs() {
   const logs = useTelemetryStore((s) => s.logs);
@@ -25,7 +26,7 @@ export function EngineeringLogs() {
               {log.severity}
             </span>{" "}
             <span className="text-slate-500">{shortStreamId(log.stream_id)}</span>{" "}
-            <span className="text-cyan-300">{log.source_node_id ?? log.node_id}</span>{" "}
+            <span className="text-cyan-300">{displayNodeId(log.source_node_id ?? log.node_id)}</span>{" "}
             <span className="text-amber-300">{log.event_type}</span>{" "}
             <span className="text-slate-400">gseq={log.global_sequence_number ?? log.sequence_number}</span>{" "}
             <span className="text-slate-400">sseq={log.source_sequence_number ?? "N/A"}</span>
@@ -35,6 +36,11 @@ export function EngineeringLogs() {
       </div>
     </section>
   );
+}
+
+function displayNodeId(nodeId: string | undefined) {
+  if (!nodeId) return "unknown_node";
+  return isAcceptedNodeId(nodeId) ? normalizeNodeId(nodeId) : nodeId;
 }
 
 function shortStreamId(streamId: string | undefined) {

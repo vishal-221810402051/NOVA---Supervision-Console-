@@ -7,6 +7,7 @@ import type {
   SyncState,
   TransportKind,
 } from "../types/telemetry";
+import { normalizeNodeId } from "../types/telemetry";
 
 export const LINK_IDS = {
   LAPTOP_PI: "link_laptop_pi",
@@ -46,14 +47,14 @@ export function createInitialLinkRegistry(): LinkRegistry {
       LINK_IDS.PI_MAIN,
       "Pi Gateway / MAIN ESP32",
       "pi_gateway",
-      "esp32_motion",
+      "esp32_main",
       "UART"
     ),
     [LINK_IDS.MAIN_SUB]: linkEntry(
       LINK_IDS.MAIN_SUB,
       "MAIN ESP32 / SUB ESP32",
-      "esp32_motion",
-      "esp32_qc",
+      "esp32_main",
+      "esp32_sub",
       "UART"
     ),
   };
@@ -70,8 +71,8 @@ export function updateLinkRegistryFromHeartbeat(
     ...registry,
     [payload.link_id]: {
       ...current,
-      source_node_id: payload.source_node_id,
-      target_node_id: payload.target_node_id,
+      source_node_id: normalizeNodeId(payload.source_node_id),
+      target_node_id: normalizeNodeId(payload.target_node_id),
       link_state: payload.link_state,
       sync_state: payload.sync_state,
       last_heartbeat_utc: payload.last_seen_utc,
@@ -101,8 +102,8 @@ export function updateLinkRegistryFromSync(
     ...registry,
     [payload.link_id]: {
       ...current,
-      source_node_id: payload.source_node_id,
-      target_node_id: payload.target_node_id,
+      source_node_id: normalizeNodeId(payload.source_node_id),
+      target_node_id: normalizeNodeId(payload.target_node_id),
       sync_state: payload.sync_state,
       status_message: statusMessage,
     },

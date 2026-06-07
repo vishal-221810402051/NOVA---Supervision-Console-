@@ -6,6 +6,7 @@ import type {
   PowerHealthPayload,
   SystemHealthPayload,
 } from "../types/telemetry";
+import { normalizeNodeId, isAcceptedNodeId } from "../types/telemetry";
 
 export const DEVICE_IDS = {
   LAPTOP_CONSOLE: "laptop_console",
@@ -39,8 +40,8 @@ export function createInitialDeviceRegistry(): DeviceRegistry {
       "Pi Gateway",
       "pi_gateway"
     ),
-    [DEVICE_IDS.MAIN_MCU]: nodeDevice(DEVICE_IDS.MAIN_MCU, "MAIN ESP32-S3", "esp32_motion"),
-    [DEVICE_IDS.SUB_MCU]: nodeDevice(DEVICE_IDS.SUB_MCU, "SUB ESP32-S3", "esp32_qc"),
+    [DEVICE_IDS.MAIN_MCU]: nodeDevice(DEVICE_IDS.MAIN_MCU, "MAIN ESP32-S3", "esp32_main"),
+    [DEVICE_IDS.SUB_MCU]: nodeDevice(DEVICE_IDS.SUB_MCU, "SUB ESP32-S3", "esp32_sub"),
     [DEVICE_IDS.WIFI_LINK]: linkDevice(DEVICE_IDS.WIFI_LINK, "WiFi Link", "WIFI"),
     [DEVICE_IDS.MAIN_SUB_UART]: linkDevice(DEVICE_IDS.MAIN_SUB_UART, "MAIN / SUB UART", "UART"),
 
@@ -282,14 +283,15 @@ function mapChipNameToDeviceId(name: string): string | null {
 }
 
 function mapNodeIdToDeviceId(nodeId: string): string | null {
+  const canonicalNodeId = isAcceptedNodeId(nodeId) ? normalizeNodeId(nodeId) : nodeId;
   const map: Record<string, string> = {
     laptop_console: DEVICE_IDS.LAPTOP_CONSOLE,
     pi_gateway: DEVICE_IDS.PI_GATEWAY,
-    esp32_motion: DEVICE_IDS.MAIN_MCU,
-    esp32_qc: DEVICE_IDS.SUB_MCU,
+    esp32_main: DEVICE_IDS.MAIN_MCU,
+    esp32_sub: DEVICE_IDS.SUB_MCU,
   };
 
-  return map[nodeId] ?? null;
+  return map[canonicalNodeId] ?? null;
 }
 
 export function getRegistrySummary(registry: DeviceRegistry) {
