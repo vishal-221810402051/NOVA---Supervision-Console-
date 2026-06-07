@@ -9,9 +9,17 @@ TelemetryScheduler telemetryScheduler(PiTelemetrySerial);
 
 void setup() {
   Serial.begin(115200);
-  delay(200);
-  Serial.println("NOVA SC MAIN ESP32 telemetry firmware starting on USB debug serial.");
-  Serial.println("Pi UART emits newline-delimited JSON telemetry only.");
+  const uint32_t serialAttachStartMs = millis();
+  while (!Serial && millis() - serialAttachStartMs < 3000) {
+    delay(10);
+  }
+
+  delay(500);
+  Serial.println("NOVA SC MAIN ESP32 telemetry firmware boot");
+  Serial.println("Phase 6.3 dry validation mode");
+  Serial.println("USB debug active");
+  Serial.println("Telemetry UART active on configured GPIO pins");
+  Serial.flush();
 
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
 

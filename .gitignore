@@ -16,6 +16,23 @@ Thumbs.db
 
 # VS Code
 .vscode/
+.vscode/ipch/
 
 # Logs
 *.log
+
+# PlatformIO
+**/.pio/
+**/.pioenvs/
+**/.piolibdeps/
+
+# Build outputs
+*.bin
+*.elf
+*.map
+*.o
+*.a
+
+# PlatformIO metadata
+.sconsign*
+project.checksum

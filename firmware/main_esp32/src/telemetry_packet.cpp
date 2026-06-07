@@ -19,6 +19,12 @@ void TelemetryPacketBuilder::beginPacket(JsonDocument &doc, const char *packetTy
 void TelemetryPacketBuilder::emitPacket(JsonDocument &doc, Stream &telemetryPort) {
   serializeJson(doc, telemetryPort);
   telemetryPort.print('\n');
+
+#if TELEMETRY_MIRROR_TO_USB
+  // TELEMETRY_MIRROR_TO_USB is temporary for Phase 6.3 dry validation only.
+  serializeJson(doc, Serial);
+  Serial.print('\n');
+#endif
 }
 
 uint32_t TelemetryPacketBuilder::nextSequenceNumber() {
