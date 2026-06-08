@@ -3,6 +3,7 @@ import type {
   DeviceRegistryEntry,
   HealthState,
   NodeHealthPayload,
+  PowerMeasurementStatus,
   PowerHealthPayload,
   SystemHealthPayload,
 } from "../types/telemetry";
@@ -208,35 +209,82 @@ export function updateRegistryFromPowerHealth(
   timestamp_utc: string
 ): DeviceRegistry {
   const next = { ...registry };
+  const measurementStatus = payload.measurement_status ?? "MEASURED";
 
   next[DEVICE_IDS.VIN_PROTECTED] = updateEntry(next[DEVICE_IDS.VIN_PROTECTED], {
-    health_state: payload.vin_protected_v >= 5.0 ? "HEALTHY" : "DEGRADED",
-    online: payload.vin_protected_v >= 5.0,
+    health_state: getPowerRailHealth(
+      payload.vin_protected_v,
+      measurementStatus,
+      (value) => value >= 5.0
+    ),
+    online: true,
     last_seen_utc: timestamp_utc,
-    status_message: `${payload.vin_protected_v.toFixed(2)} V`,
+    status_message: formatPowerMeasurement(
+      payload.vin_protected_v,
+      measurementStatus,
+      2
+    ),
   });
 
   next[DEVICE_IDS.RAIL_5V] = updateEntry(next[DEVICE_IDS.RAIL_5V], {
-    health_state:
-      payload.rail_5v_v >= 4.75 && payload.rail_5v_v <= 5.25
-        ? "HEALTHY"
-        : "DEGRADED",
+    health_state: getPowerRailHealth(
+      payload.rail_5v_v,
+      measurementStatus,
+      (value) => value >= 4.75 && value <= 5.25
+    ),
     online: true,
     last_seen_utc: timestamp_utc,
-    status_message: `${payload.rail_5v_v.toFixed(3)} V`,
+    status_message: formatPowerMeasurement(
+      payload.rail_5v_v,
+      measurementStatus,
+      3
+    ),
   });
 
   next[DEVICE_IDS.RAIL_3V3] = updateEntry(next[DEVICE_IDS.RAIL_3V3], {
-    health_state:
-      payload.rail_3v3_v >= 3.135 && payload.rail_3v3_v <= 3.465
-        ? "HEALTHY"
-        : "DEGRADED",
+    health_state: getPowerRailHealth(
+      payload.rail_3v3_v,
+      measurementStatus,
+      (value) => value >= 3.135 && value <= 3.465
+    ),
     online: true,
     last_seen_utc: timestamp_utc,
-    status_message: `${payload.rail_3v3_v.toFixed(3)} V`,
+    status_message: formatPowerMeasurement(
+      payload.rail_3v3_v,
+      measurementStatus,
+      3
+    ),
   });
 
   return next;
+}
+
+function getPowerRailHealth(
+  value: number | null,
+  measurementStatus: PowerMeasurementStatus,
+  isHealthy: (value: number) => boolean
+): HealthState {
+  if (value === null) return "DEGRADED";
+  if (measurementStatus !== "MEASURED") return "DEGRADED";
+  return isHealthy(value) ? "HEALTHY" : "DEGRADED";
+}
+
+function formatPowerMeasurement(
+  value: number | null,
+  measurementStatus: PowerMeasurementStatus,
+  precision: number
+) {
+  if (value !== null) return `${value.toFixed(precision)} V`;
+  if (measurementStatus === "ADC_NOT_CONFIGURED") {
+    return "Not measured: ADC_NOT_CONFIGURED";
+  }
+  if (measurementStatus === "SENSOR_UNAVAILABLE") {
+    return "Unavailable";
+  }
+  if (measurementStatus === "INVALID_READING") {
+    return "Invalid reading";
+  }
+  return "Not measured";
 }
 
 export function updateRegistryFromNodeHealth(

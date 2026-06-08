@@ -6,6 +6,8 @@ import type {
   LogSeverity,
   NodeId,
   NodeRole,
+  PowerMeasurementStatus,
+  PowerState,
   PacketRejectionReason,
   PacketValidationResult,
   PacketValidationWarning,
@@ -37,6 +39,19 @@ const ALLOWED_EVENT_TYPES: EventType[] = [
   "TELEMETRY_INTEGRITY_EVENT",
 ];
 const HEALTH_STATES: HealthState[] = ["HEALTHY", "DEGRADED", "OFFLINE", "FAIL_SAFE"];
+const POWER_STATES: PowerState[] = [
+  "HEALTHY",
+  "DEGRADED",
+  "OFFLINE",
+  "FAIL_SAFE",
+  "UNKNOWN",
+];
+const POWER_MEASUREMENT_STATUSES: PowerMeasurementStatus[] = [
+  "MEASURED",
+  "ADC_NOT_CONFIGURED",
+  "SENSOR_UNAVAILABLE",
+  "INVALID_READING",
+];
 const LINK_STATES: LinkState[] = [
   "LINK_HEALTHY",
   "LINK_DEGRADED",
@@ -398,11 +413,28 @@ function validateChipDevice(device: unknown, expectedBus: "I2C" | "SPI") {
 }
 
 function validatePowerHealth(payload: PacketRecord, raw: unknown): PacketValidationResult {
-  if (!isNumberInRange(payload.vin_protected_v, 0, 30)) return invalidNumeric("Invalid vin_protected_v", raw);
-  if (!isNumberInRange(payload.rail_5v_v, 0, 8)) return invalidNumeric("Invalid rail_5v_v", raw);
-  if (!isNumberInRange(payload.rail_3v3_v, 0, 6)) return invalidNumeric("Invalid rail_3v3_v", raw);
+  const voltageResults = [
+    validatePowerVoltage(payload.vin_protected_v, 0, 30),
+    validatePowerVoltage(payload.rail_5v_v, 0, 8),
+    validatePowerVoltage(payload.rail_3v3_v, 0, 6),
+  ];
+
+  if (voltageResults[0] === "invalid") return invalidNumeric("Invalid vin_protected_v", raw);
+  if (voltageResults[1] === "invalid") return invalidNumeric("Invalid rail_5v_v", raw);
+  if (voltageResults[2] === "invalid") return invalidNumeric("Invalid rail_3v3_v", raw);
+
+  const hasNullVoltage = voltageResults.includes("null");
+  if (hasNullVoltage && !isPowerMeasurementStatus(payload.measurement_status)) {
+    return invalidPayload("measurement_status is required when a power voltage is null", raw);
+  }
+  if (
+    payload.measurement_status !== undefined &&
+    !isPowerMeasurementStatus(payload.measurement_status)
+  ) {
+    return invalidPayload("Invalid measurement_status", raw);
+  }
   if (typeof payload.brownout_detected !== "boolean") return invalidPayload("brownout_detected must be boolean", raw);
-  if (!isHealthState(payload.power_state)) return invalidPayload("Invalid power_state", raw);
+  if (!isPowerState(payload.power_state)) return invalidPayload("Invalid power_state", raw);
   return ok(raw);
 }
 
@@ -530,6 +562,23 @@ function isValidTimestamp(value: unknown): value is string {
 
 function isHealthState(value: unknown): value is HealthState {
   return HEALTH_STATES.includes(value as HealthState);
+}
+
+function isPowerState(value: unknown): value is PowerState {
+  return POWER_STATES.includes(value as PowerState);
+}
+
+function isPowerMeasurementStatus(value: unknown): value is PowerMeasurementStatus {
+  return POWER_MEASUREMENT_STATUSES.includes(value as PowerMeasurementStatus);
+}
+
+function validatePowerVoltage(
+  value: unknown,
+  min: number,
+  max: number
+): "number" | "null" | "invalid" {
+  if (value === null) return "null";
+  return isNumberInRange(value, min, max) ? "number" : "invalid";
 }
 
 function isLinkState(value: unknown): value is LinkState {

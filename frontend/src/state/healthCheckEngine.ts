@@ -523,9 +523,9 @@ function chipPowerRules(registry: DeviceRegistry): HealthCheckRule[] {
     v1DeviceRule("PCA9685_1_DETECTED", "PCA9685 #1 detected at 0x40", registry[DEVICE_IDS.PCA9685_1], "CHIP"),
     v1DeviceRule("PCA9685_2_DETECTED", "PCA9685 #2 detected at 0x41", registry[DEVICE_IDS.PCA9685_2], "CHIP"),
     v1DeviceRule("PCA9685_ALLCALL_DETECTED", "PCA9685 AllCall detected at 0x70", registry[DEVICE_IDS.PCA9685_ALLCALL], "CHIP"),
-    v1DeviceRule("VIN_PRESENT", "VIN protected rail present", registry[DEVICE_IDS.VIN_PROTECTED], "POWER"),
-    v1DeviceRule("RAIL_5V_VALID", "+5V logic rail valid", registry[DEVICE_IDS.RAIL_5V], "POWER"),
-    v1DeviceRule("RAIL_3V3_VALID", "+3V3 logic rail valid", registry[DEVICE_IDS.RAIL_3V3], "POWER"),
+    powerRailRule("VIN_PRESENT", "VIN protected rail present", registry[DEVICE_IDS.VIN_PROTECTED]),
+    powerRailRule("RAIL_5V_VALID", "+5V logic rail valid", registry[DEVICE_IDS.RAIL_5V]),
+    powerRailRule("RAIL_3V3_VALID", "+3V3 logic rail valid", registry[DEVICE_IDS.RAIL_3V3]),
     framExpectedRule(registry[DEVICE_IDS.FRAM]),
   ];
 }
@@ -754,6 +754,70 @@ function v1DeviceRule(
     details: pass
       ? device.status_message
       : `${device.display_name} is ${device.health_state}: ${device.status_message}`,
+    evidence: {
+      source: device.device_id,
+      timestamp_utc: device.last_seen_utc,
+      value: device.health_state,
+    },
+  });
+}
+
+function powerRailRule(
+  rule_id: string,
+  label: string,
+  device: DeviceRegistryEntry | undefined
+): HealthCheckRule {
+  if (!device) {
+    return rule({
+      rule_id,
+      label,
+      category: "POWER",
+      result: "FAIL",
+      severity: "ERROR",
+      details: "Power rail missing from registry",
+      evidence: { source: "deviceRegistry", value: null },
+    });
+  }
+
+  if (device.health_state === "HEALTHY") {
+    return rule({
+      rule_id,
+      label,
+      category: "POWER",
+      result: "PASS",
+      severity: "INFO",
+      details: device.status_message,
+      evidence: {
+        source: device.device_id,
+        timestamp_utc: device.last_seen_utc,
+        value: device.health_state,
+      },
+    });
+  }
+
+  if (device.health_state === "DEGRADED") {
+    return rule({
+      rule_id,
+      label,
+      category: "POWER",
+      result: "WARNING",
+      severity: "WARNING",
+      details: `${device.display_name} is degraded: ${device.status_message}`,
+      evidence: {
+        source: device.device_id,
+        timestamp_utc: device.last_seen_utc,
+        value: device.health_state,
+      },
+    });
+  }
+
+  return rule({
+    rule_id,
+    label,
+    category: "POWER",
+    result: "FAIL",
+    severity: "ERROR",
+    details: `${device.display_name} is ${device.health_state}: ${device.status_message}`,
     evidence: {
       source: device.device_id,
       timestamp_utc: device.last_seen_utc,

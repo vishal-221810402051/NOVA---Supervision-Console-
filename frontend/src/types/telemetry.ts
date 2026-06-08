@@ -1,5 +1,13 @@
 export type HealthState = "HEALTHY" | "DEGRADED" | "OFFLINE" | "FAIL_SAFE";
 
+export type PowerMeasurementStatus =
+  | "MEASURED"
+  | "ADC_NOT_CONFIGURED"
+  | "SENSOR_UNAVAILABLE"
+  | "INVALID_READING";
+
+export type PowerState = HealthState | "UNKNOWN";
+
 export type ConnectionState =
   | "CONNECTING"
   | "CONNECTED"
@@ -135,11 +143,12 @@ export type ChipStatusPayload = {
 };
 
 export type PowerHealthPayload = {
-  vin_protected_v: number;
-  rail_5v_v: number;
-  rail_3v3_v: number;
+  vin_protected_v: number | null;
+  rail_5v_v: number | null;
+  rail_3v3_v: number | null;
   brownout_detected: boolean;
-  power_state: HealthState;
+  power_state: PowerState;
+  measurement_status?: PowerMeasurementStatus;
 };
 
 export type GatewayHealthPayload = {
