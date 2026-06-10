@@ -9,7 +9,7 @@ export function ChipStatus() {
   const devices = [...data.i2c_devices, ...data.spi_devices];
 
   return (
-    <Panel title="Connected Chip Status">
+    <Panel title="Chip Validation Status">
       <div className="grid grid-cols-3 gap-3">
         {devices.map((d: any) => (
           <StatusBadge

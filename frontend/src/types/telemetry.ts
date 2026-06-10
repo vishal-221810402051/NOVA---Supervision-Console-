@@ -134,8 +134,18 @@ export type ChipDevice = {
   bus: "I2C" | "SPI";
   address?: string;
   chip_select?: string;
-  status: "DETECTED" | "MISSING" | "BLOCKED_WRONG_IC_PENDING";
+  status: ChipDeviceStatus;
 };
+
+export type ChipDeviceStatus =
+  | "DETECTED"
+  | "MISSING"
+  | "UNKNOWN"
+  | "NOT_VALIDATED"
+  | "VALIDATION_DISABLED"
+  | "BUS_NOT_READY"
+  | "DETECTED_UNCONFIRMED"
+  | "BLOCKED_WRONG_IC_PENDING";
 
 export type ChipStatusPayload = {
   i2c_devices: ChipDevice[];

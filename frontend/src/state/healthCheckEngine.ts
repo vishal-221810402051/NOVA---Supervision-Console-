@@ -890,15 +890,18 @@ function v1DeviceRule(
   }
 
   const pass = device.health_state === "HEALTHY";
+  const chipPending = category === "CHIP" && device.health_state === "DEGRADED";
 
   return rule({
     rule_id,
     label,
     category,
-    result: pass ? "PASS" : "FAIL",
-    severity: pass ? "INFO" : "ERROR",
+    result: pass ? "PASS" : chipPending ? "WARNING" : "FAIL",
+    severity: pass ? "INFO" : chipPending ? "WARNING" : "ERROR",
     details: pass
       ? device.status_message
+      : chipPending
+        ? `${device.display_name} validation pending: ${device.status_message}`
       : `${device.display_name} is ${device.health_state}: ${device.status_message}`,
     evidence: {
       source: device.device_id,

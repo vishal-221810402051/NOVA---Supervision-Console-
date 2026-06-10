@@ -84,6 +84,22 @@ Every emitted packet uses:
 
 `POWER_HEALTH` intentionally uses `null` voltage values until ADC measurement hardware is configured. It does not fake voltage readings.
 
+## I2C Chip Validation Safety
+
+Phase 6.4D disables I2C chip validation by default. Expected I2C devices report
+`NOT_VALIDATED` instead of `DETECTED` until the NOVA B1 I2C pins, pullups, and
+device-specific functional checks are confirmed.
+
+This prevents false-positive chip detection from floating lines, wrong pin
+mapping, leakage, bus artifacts, or address ACKs that do not prove a real device
+is present.
+
+`DETECTED` is reserved for a future strict validation mode with confirmed pins,
+stable repeated ACKs, and safe register-level checks. GPIO8/GPIO9 remain
+candidate I2C pins and must be confirmed before real validation is enabled.
+
+The SPI FRAM placeholder remains `BLOCKED_WRONG_IC_PENDING`.
+
 ## Build
 
 From this directory:

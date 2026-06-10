@@ -1,4 +1,5 @@
 import type {
+  ChipDeviceStatus,
   ChipStatusPayload,
   DeviceRegistryEntry,
   HealthState,
@@ -189,18 +190,85 @@ export function updateRegistryFromChipStatus(
     const id = mapChipNameToDeviceId(device.name);
     if (!id || !next[id]) continue;
 
-    const isBlocked = device.status === "BLOCKED_WRONG_IC_PENDING";
-    const isDetected = device.status === "DETECTED";
+    const chipState = chipStatusToRegistryState(device.status);
 
     next[id] = updateEntry(next[id], {
-      health_state: isDetected ? "HEALTHY" : isBlocked ? "DEGRADED" : "OFFLINE",
-      online: isDetected,
+      health_state: chipState.health_state,
+      online: chipState.online,
       last_seen_utc: timestamp_utc,
-      status_message: device.status,
+      status_message: chipState.status_message,
     });
   }
 
   return next;
+}
+
+function chipStatusToRegistryState(status: ChipDeviceStatus): {
+  health_state: HealthState;
+  online: boolean;
+  status_message: string;
+} {
+  if (status === "DETECTED") {
+    return {
+      health_state: "HEALTHY",
+      online: true,
+      status_message: "Validated detected",
+    };
+  }
+
+  if (status === "MISSING") {
+    return {
+      health_state: "DEGRADED",
+      online: false,
+      status_message: "Missing",
+    };
+  }
+
+  if (status === "NOT_VALIDATED") {
+    return {
+      health_state: "DEGRADED",
+      online: false,
+      status_message: "Not validated",
+    };
+  }
+
+  if (status === "VALIDATION_DISABLED") {
+    return {
+      health_state: "DEGRADED",
+      online: false,
+      status_message: "Validation disabled",
+    };
+  }
+
+  if (status === "DETECTED_UNCONFIRMED") {
+    return {
+      health_state: "DEGRADED",
+      online: false,
+      status_message: "Detected but unconfirmed",
+    };
+  }
+
+  if (status === "BUS_NOT_READY") {
+    return {
+      health_state: "DEGRADED",
+      online: false,
+      status_message: "I2C bus not ready",
+    };
+  }
+
+  if (status === "BLOCKED_WRONG_IC_PENDING") {
+    return {
+      health_state: "DEGRADED",
+      online: false,
+      status_message: "BLOCKED_WRONG_IC_PENDING",
+    };
+  }
+
+  return {
+    health_state: "DEGRADED",
+    online: false,
+    status_message: "Unknown",
+  };
 }
 
 export function updateRegistryFromPowerHealth(

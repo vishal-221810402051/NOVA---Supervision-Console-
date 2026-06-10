@@ -1,6 +1,7 @@
 import type {
   EventType,
   HealthState,
+  ChipDeviceStatus,
   LinkId,
   LinkState,
   LogSeverity,
@@ -66,6 +67,16 @@ const NODE_ROLES: NodeRole[] = [
   "SAFETY_QC",
 ];
 const LOG_SEVERITIES: LogSeverity[] = ["INFO", "WARNING", "ERROR", "CRITICAL"];
+const CHIP_DEVICE_STATUSES: ChipDeviceStatus[] = [
+  "DETECTED",
+  "MISSING",
+  "UNKNOWN",
+  "NOT_VALIDATED",
+  "VALIDATION_DISABLED",
+  "BUS_NOT_READY",
+  "DETECTED_UNCONFIRMED",
+  "BLOCKED_WRONG_IC_PENDING",
+];
 
 const LINK_TOPOLOGY: Record<LinkId, { source: NodeId; target: NodeId }> = {
   link_laptop_pi: { source: "pi_gateway", target: "laptop_console" },
@@ -402,11 +413,7 @@ function validateChipDevice(device: unknown, expectedBus: "I2C" | "SPI") {
   if (!isRecord(device)) return false;
   if (typeof device.name !== "string") return false;
   if (device.bus !== expectedBus) return false;
-  if (
-    device.status !== "DETECTED" &&
-    device.status !== "MISSING" &&
-    device.status !== "BLOCKED_WRONG_IC_PENDING"
-  ) {
+  if (!CHIP_DEVICE_STATUSES.includes(device.status as ChipDeviceStatus)) {
     return false;
   }
   if (expectedBus === "I2C" && typeof device.address !== "string") return false;

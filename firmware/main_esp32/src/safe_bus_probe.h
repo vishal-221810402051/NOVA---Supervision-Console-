@@ -3,6 +3,17 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
-bool isI2cDeviceDetected(uint8_t address);
+namespace ChipStatus {
+static constexpr const char *DETECTED = "DETECTED";
+static constexpr const char *MISSING = "MISSING";
+static constexpr const char *NOT_VALIDATED = "NOT_VALIDATED";
+static constexpr const char *UNKNOWN = "UNKNOWN";
+static constexpr const char *BUS_NOT_READY = "BUS_NOT_READY";
+static constexpr const char *DETECTED_UNCONFIRMED = "DETECTED_UNCONFIRMED";
+static constexpr const char *BLOCKED_WRONG_IC_PENDING = "BLOCKED_WRONG_IC_PENDING";
+static constexpr const char *VALIDATION_DISABLED = "VALIDATION_DISABLED";
+}  // namespace ChipStatus
+
+const char *classifyI2cDeviceStatus(uint8_t address);
 void appendI2cDevice(JsonArray devices, const char *name, uint8_t address);
 void appendFramPlaceholder(JsonArray devices);
