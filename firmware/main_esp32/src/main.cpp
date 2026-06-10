@@ -22,6 +22,8 @@ void setup() {
   Serial.flush();
 
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+  Wire.setClock(I2C_CLOCK_HZ);
+  Wire.setTimeOut(I2C_TIMEOUT_MS);
 
   PiTelemetrySerial.begin(
       MAIN_PI_UART_BAUD,

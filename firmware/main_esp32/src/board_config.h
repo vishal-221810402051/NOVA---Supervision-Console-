@@ -26,23 +26,21 @@ static constexpr uint32_t POWER_HEALTH_INTERVAL_MS = 2000;
 static constexpr uint32_t LINK_TIMEOUT_MS = 3000;
 static constexpr uint32_t MISSED_HEARTBEAT_THRESHOLD = 3;
 
-// Phase 6.4D I2C validation safety policy:
-// - I2C chip validation is disabled by default.
-// - GPIO8/GPIO9 are candidate pins and are not yet trusted as final validated
-//   NOVA B1 I2C pins.
-// - An address ACK alone is not enough to claim DETECTED.
-// - DETECTED is reserved for a future strict validation path with confirmed
-//   pins, pullups, stable ACKs, and functional register checks.
-static constexpr bool ENABLE_I2C_CHIP_VALIDATION = false;
+// Phase 6.4E controlled read-only I2C validation:
+// - GPIO8/GPIO9 are confirmed NOVA B1 I2C SDA/SCL pins.
+// - DETECTED requires stable ACK plus functional register-read validation.
+// - Address ACK alone is not enough to claim DETECTED.
+// - No PCA9685 PWM output, actuator output, or register writes are enabled.
+static constexpr bool ENABLE_I2C_CHIP_VALIDATION = true;
 static constexpr bool REPORT_I2C_AS_NOT_VALIDATED_WHEN_DISABLED = true;
 static constexpr uint8_t I2C_CONFIRMATION_READS = 3;
 static constexpr uint32_t I2C_PROBE_RETRY_DELAY_MS = 5;
 static constexpr bool I2C_REQUIRE_FUNCTIONAL_READ = true;
+static constexpr uint32_t I2C_CLOCK_HZ = 100000;
+static constexpr uint32_t I2C_TIMEOUT_MS = 20;
 
-// Candidate I2C pins for safe bus probing. Confirm against the final board pin
-// map before enabling hardware validation.
-static constexpr uint8_t I2C_SDA_PIN = 8;
-static constexpr uint8_t I2C_SCL_PIN = 9;
+static constexpr int I2C_SDA_PIN = 8;
+static constexpr int I2C_SCL_PIN = 9;
 
 static constexpr uint8_t ADS1115_ADDRESS = 0x48;
 static constexpr uint8_t DS3231_RTC_ADDRESS = 0x68;

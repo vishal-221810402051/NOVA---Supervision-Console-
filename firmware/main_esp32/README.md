@@ -86,19 +86,23 @@ Every emitted packet uses:
 
 ## I2C Chip Validation Safety
 
-Phase 6.4D disables I2C chip validation by default. Expected I2C devices report
-`NOT_VALIDATED` instead of `DETECTED` until the NOVA B1 I2C pins, pullups, and
-device-specific functional checks are confirmed.
+Phase 6.4E enables controlled read-only I2C chip validation after confirming
+NOVA B1 GPIO8/GPIO9 as SDA/SCL. `DETECTED` requires stable repeated ACKs plus a
+safe functional register read. Address ACK alone is never enough to claim a chip
+is detected.
 
-This prevents false-positive chip detection from floating lines, wrong pin
-mapping, leakage, bus artifacts, or address ACKs that do not prove a real device
-is present.
+Validation behavior:
 
-`DETECTED` is reserved for a future strict validation mode with confirmed pins,
-stable repeated ACKs, and safe register-level checks. GPIO8/GPIO9 remain
-candidate I2C pins and must be confirmed before real validation is enabled.
+- ADS1115 at `0x48`: reads config register `0x01`.
+- DS3231 RTC at `0x68`: reads seconds register `0x00` and checks BCD range.
+- PCA9685 at `0x40` / `0x41`: reads MODE1 register `0x00`.
+- PCA9685 AllCall at `0x70`: remains `NOT_VALIDATED` because it is not an
+  independent physical chip in this phase.
+- MB85RS256B FRAM: remains `BLOCKED_WRONG_IC_PENDING`.
 
-The SPI FRAM placeholder remains `BLOCKED_WRONG_IC_PENDING`.
+No writes are performed during I2C validation. The firmware does not set RTC
+time, configure ADS1115 conversion mode, write PCA9685 MODE registers, enable
+PWM output, or drive actuator hardware.
 
 ## Build
 
