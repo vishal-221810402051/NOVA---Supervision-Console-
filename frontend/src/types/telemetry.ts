@@ -174,7 +174,7 @@ export type LinkHeartbeatPayload = {
   missed_heartbeat_threshold: number;
   link_state: LinkState;
   sync_state: SyncState;
-  last_seen_utc: string;
+  last_seen_utc: string | null;
   round_trip_latency_ms: number | null;
 };
 

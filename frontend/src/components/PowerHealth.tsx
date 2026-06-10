@@ -1,4 +1,5 @@
 import { useTelemetryStore } from "../store/telemetryStore";
+import type { PowerMeasurementStatus } from "../types/telemetry";
 import { StatusBadge } from "./StatusBadge";
 
 export function PowerHealth() {
@@ -9,13 +10,26 @@ export function PowerHealth() {
   return (
     <Panel title="Power Health">
       <div className="grid grid-cols-4 gap-3">
-        <Metric label="VIN Protected" value={`${data.vin_protected_v} V`} />
-        <Metric label="+5V Logic" value={`${data.rail_5v_v} V`} />
-        <Metric label="+3V3 Logic" value={`${data.rail_3v3_v} V`} />
+        <Metric label="VIN Protected" value={formatVoltage(data.vin_protected_v, data.measurement_status)} />
+        <Metric label="+5V Logic" value={formatVoltage(data.rail_5v_v, data.measurement_status)} />
+        <Metric label="+3V3 Logic" value={formatVoltage(data.rail_3v3_v, data.measurement_status)} />
         <StatusBadge label="Power State" state={data.power_state} />
+        <Metric label="Measurement Status" value={data.measurement_status ?? "MEASURED"} />
       </div>
     </Panel>
   );
+}
+
+function formatVoltage(
+  value: number | null | undefined,
+  measurementStatus: PowerMeasurementStatus | undefined
+) {
+  if (typeof value === "number") return `${value.toFixed(3)} V`;
+  if (value === undefined) return "No data";
+  if (measurementStatus === "ADC_NOT_CONFIGURED") return "Not measured";
+  if (measurementStatus === "SENSOR_UNAVAILABLE") return "Unavailable";
+  if (measurementStatus === "INVALID_READING") return "Invalid reading";
+  return "Not measured";
 }
 
 function Panel({ title, children }: any) {

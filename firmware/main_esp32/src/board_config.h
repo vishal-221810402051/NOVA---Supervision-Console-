@@ -2,11 +2,13 @@
 
 #include <Arduino.h>
 
-// Phase 6.2 is telemetry-only. These UART pins are candidates and must be
-// confirmed against the final MAIN ESP32-S3 board pin map before hardware use.
-static constexpr int MAIN_PI_UART_PORT = 1;
-static constexpr int MAIN_PI_UART_TX_PIN = 17;
-static constexpr int MAIN_PI_UART_RX_PIN = 18;
+// NOVA B1 routes PI_CTRL_IF J2 through the ESP32-S3-WROOM-1 UART0 pads:
+// MCU_UART_TX -> ESP32-S3 U0TXD / TXD0, MCU_UART_RX -> ESP32-S3 U0RXD / RXD0.
+// In the Arduino ESP32-S3 core, the default UART0 pads are GPIO43 (TXD0) and
+// GPIO44 (RXD0). Native USB CDC remains on USB Serial for debug output.
+static constexpr int MAIN_PI_UART_PORT = 0;
+static constexpr int MAIN_PI_UART_TX_PIN = 43;
+static constexpr int MAIN_PI_UART_RX_PIN = 44;
 static constexpr uint32_t MAIN_PI_UART_BAUD = 115200;
 
 static constexpr const char *HW_SCHEMA_VERSION = "hw.v1";

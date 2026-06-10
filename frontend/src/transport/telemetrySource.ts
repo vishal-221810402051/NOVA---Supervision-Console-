@@ -50,13 +50,25 @@ function resolveTelemetryWsUrl() {
   return DEFAULT_TELEMETRY_WS_URL;
 }
 
+function isLocalTelemetryEndpoint(endpoint: string) {
+  try {
+    const hostname = new URL(endpoint).hostname.toLowerCase();
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return true;
+  }
+}
+
+const resolvedEndpoint = resolveTelemetryWsUrl();
+const isLocalEndpoint = isLocalTelemetryEndpoint(resolvedEndpoint);
+
 export const SIMULATOR_WEBSOCKET_SOURCE: Omit<
   TelemetrySourceStatus,
   "connection_state" | "last_connected_utc" | "last_error" | "reconnect_attempts"
 > = {
-  source_id: "simulator_websocket",
-  display_name: "Simulator WebSocket",
+  source_id: isLocalEndpoint ? "simulator_websocket" : "pi_hardware_websocket",
+  display_name: isLocalEndpoint ? "Simulator WebSocket" : "Pi Hardware WebSocket",
   transport_kind: "WEBSOCKET",
-  endpoint: resolveTelemetryWsUrl(),
-  is_simulated: true,
+  endpoint: resolvedEndpoint,
+  is_simulated: isLocalEndpoint,
 };

@@ -397,7 +397,8 @@ function applyAcceptedPacketToReplayState(
   if (replayPacket.event_type === "LINK_HEARTBEAT_TELEMETRY") {
     state.linkRegistry = updateLinkRegistryFromHeartbeat(
       state.linkRegistry,
-      replayPacket.payload
+      replayPacket.payload,
+      replayPacket.timestamp_utc
     );
   }
 

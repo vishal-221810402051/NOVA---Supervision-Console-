@@ -318,7 +318,9 @@ function validateLinkHeartbeat(
   }
   if (!isLinkState(payload.link_state)) return invalidPayload("Invalid link_state", raw);
   if (!isSyncState(payload.sync_state)) return invalidPayload("Invalid sync_state", raw);
-  if (!isValidTimestamp(payload.last_seen_utc)) return reject("INVALID_TIMESTAMP", "Invalid last_seen_utc", "ERROR", raw);
+  if (payload.last_seen_utc !== null && !isValidTimestamp(payload.last_seen_utc)) {
+    return reject("INVALID_TIMESTAMP", "Invalid last_seen_utc", "ERROR", raw);
+  }
   if (payload.round_trip_latency_ms !== null && !isNonNegativeNumber(payload.round_trip_latency_ms)) {
     return invalidNumeric("Invalid round_trip_latency_ms", raw);
   }
@@ -486,7 +488,11 @@ function validateLinkIdentity(
   }
 
   const topology = LINK_TOPOLOGY[payload.link_id];
-  if (payload.source_node_id !== topology.source || payload.target_node_id !== topology.target) {
+  const endpointsMatchTopology =
+    (payload.source_node_id === topology.source && payload.target_node_id === topology.target) ||
+    (payload.source_node_id === topology.target && payload.target_node_id === topology.source);
+
+  if (!endpointsMatchTopology) {
     return reject("EVENT_SOURCE_MISMATCH", "link source/target pair does not match canonical topology", "ERROR", raw);
   }
 

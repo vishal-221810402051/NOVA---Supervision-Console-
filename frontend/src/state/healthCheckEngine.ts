@@ -110,6 +110,7 @@ export function evaluateV1PlusHealthCheck(params: {
   sequenceGaps: number;
   sequenceResets: number;
   streamSwitches: number;
+  hardwareBringupMode?: boolean;
 }, options: {
   nowMs?: number;
 } = {}): {
@@ -128,13 +129,34 @@ export function evaluateV1PlusHealthCheck(params: {
 
   const rules: HealthCheckRule[] = [
     ...topologyRules(params, piGateway, mainMcu, subMcu),
-    ...gatewayRules(params.gatewayHealth, piGateway),
-    ...linkRules(params.linkRegistry, params.connectionState, options.nowMs),
+    ...gatewayRules(params.gatewayHealth, piGateway, params.hardwareBringupMode === true),
+    ...linkRules(
+      params.linkRegistry,
+      params.connectionState,
+      params.hardwareBringupMode === true,
+      options.nowMs
+    ),
     ...streamRules(params),
     ...integrityRules(params),
-    nodeRule("NODE_PI_GATEWAY_HEALTH", "Pi gateway node", piGateway),
+    params.hardwareBringupMode
+      ? bringupWarningRule(
+          "NODE_PI_GATEWAY_HEALTH",
+          "Pi gateway node",
+          "NODE",
+          "Dedicated Pi gateway node health telemetry is not implemented for Phase 6.4C hardware bring-up",
+          piGateway
+        )
+      : nodeRule("NODE_PI_GATEWAY_HEALTH", "Pi gateway node", piGateway),
     nodeRule("NODE_MAIN_ESP32_HEALTH", "MAIN ESP32-S3 node", mainMcu),
-    nodeRule("NODE_SUB_ESP32_HEALTH", "SUB ESP32-S3 node", subMcu),
+    params.hardwareBringupMode
+      ? bringupWarningRule(
+          "NODE_SUB_ESP32_HEALTH",
+          "SUB ESP32-S3 node",
+          "NODE",
+          "SUB ESP32-S3 is not connected or in scope for Phase 6.4C",
+          subMcu
+        )
+      : nodeRule("NODE_SUB_ESP32_HEALTH", "SUB ESP32-S3 node", subMcu),
     ...chipPowerRules(params.deviceRegistry),
   ];
 
@@ -160,6 +182,7 @@ function topologyRules(
     connectionState: ConnectionState;
     isTelemetryStale: boolean;
     activeStreamId: string | null;
+    hardwareBringupMode?: boolean;
   },
   piGateway: DeviceRegistryEntry | undefined,
   mainMcu: DeviceRegistryEntry | undefined,
@@ -175,8 +198,16 @@ function topologyRules(
     params.linkRegistry[LINK_IDS.PI_MAIN],
     params.linkRegistry[LINK_IDS.MAIN_SUB],
   ];
+  const piMainLink = params.linkRegistry[LINK_IDS.PI_MAIN];
   const allLinksHealthy = links.every((l) => l?.link_state === "LINK_HEALTHY");
   const allLinksSynced = links.every((l) => l?.sync_state === "SYNCED");
+  const phase64cReachable =
+    laptopReachability.result === "PASS" &&
+    mainMcu?.health_state === "HEALTHY" &&
+    piMainLink?.link_state === "LINK_HEALTHY" &&
+    piMainLink?.sync_state === "SYNCED" &&
+    !params.isTelemetryStale &&
+    params.connectionState === "CONNECTED";
   const chainReachable =
     laptopReachability.result === "PASS" &&
     piGateway?.health_state === "HEALTHY" &&
@@ -200,21 +231,49 @@ function topologyRules(
         value: params.connectionState,
       },
     }),
-    requiredNodeRule("TOPOLOGY_NODE_PI_PRESENT", "Pi gateway present", piGateway, "TOPOLOGY"),
+    params.hardwareBringupMode
+      ? bringupWarningRule(
+          "TOPOLOGY_NODE_PI_PRESENT",
+          "Pi gateway present",
+          "TOPOLOGY",
+          "Pi gateway is reachable as the remote WebSocket backend; dedicated gateway health telemetry is pending",
+          piGateway
+        )
+      : requiredNodeRule("TOPOLOGY_NODE_PI_PRESENT", "Pi gateway present", piGateway, "TOPOLOGY"),
     requiredNodeRule("TOPOLOGY_NODE_MAIN_PRESENT", "MAIN ESP32-S3 present", mainMcu, "TOPOLOGY"),
-    requiredNodeRule("TOPOLOGY_NODE_SUB_PRESENT", "SUB ESP32-S3 present", subMcu, "TOPOLOGY"),
+    params.hardwareBringupMode
+      ? bringupWarningRule(
+          "TOPOLOGY_NODE_SUB_PRESENT",
+          "SUB ESP32-S3 present",
+          "TOPOLOGY",
+          "SUB ESP32-S3 is not connected or in scope for Phase 6.4C",
+          subMcu
+        )
+      : requiredNodeRule("TOPOLOGY_NODE_SUB_PRESENT", "SUB ESP32-S3 present", subMcu, "TOPOLOGY"),
     rule({
       rule_id: "TOPOLOGY_CHAIN_REACHABLE",
-      label: "Laptop / Pi / MAIN / SUB chain reachable",
+      label: params.hardwareBringupMode
+        ? "Laptop / Pi / MAIN bring-up path reachable"
+        : "Laptop / Pi / MAIN / SUB chain reachable",
       category: "TOPOLOGY",
-      result: chainReachable ? "PASS" : "FAIL",
-      severity: chainReachable ? "INFO" : "CRITICAL",
-      details: chainReachable
-        ? "All topology links are healthy, synced, connected, and fresh"
-        : "Topology chain is not fully healthy, synced, connected, and fresh",
+      result: params.hardwareBringupMode
+        ? phase64cReachable ? "PASS" : "WARNING"
+        : chainReachable ? "PASS" : "FAIL",
+      severity: params.hardwareBringupMode
+        ? phase64cReachable ? "INFO" : "WARNING"
+        : chainReachable ? "INFO" : "CRITICAL",
+      details: params.hardwareBringupMode
+        ? phase64cReachable
+          ? "Phase 6.4C Laptop / Pi / MAIN telemetry path is live; SUB remains out of scope"
+          : "Phase 6.4C telemetry path is partially validated; full topology is not claimed"
+        : chainReachable
+          ? "All topology links are healthy, synced, connected, and fresh"
+          : "Topology chain is not fully healthy, synced, connected, and fresh",
       evidence: {
         source: "linkRegistry",
-        value: `healthy=${allLinksHealthy} synced=${allLinksSynced} stale=${params.isTelemetryStale}`,
+        value: params.hardwareBringupMode
+          ? `pi_main=${piMainLink?.link_state}/${piMainLink?.sync_state} stale=${params.isTelemetryStale}`
+          : `healthy=${allLinksHealthy} synced=${allLinksSynced} stale=${params.isTelemetryStale}`,
       },
     }),
   ];
@@ -222,9 +281,36 @@ function topologyRules(
 
 function gatewayRules(
   gatewayHealth: GatewayHealthPayload | null,
-  piGateway: DeviceRegistryEntry | undefined
+  piGateway: DeviceRegistryEntry | undefined,
+  hardwareBringupMode: boolean
 ): HealthCheckRule[] {
   if (!gatewayHealth) {
+    if (hardwareBringupMode) {
+      return [
+        rule({
+          rule_id: "GATEWAY_TELEMETRY_PRESENT",
+          label: "Gateway health telemetry present",
+          category: "GATEWAY",
+          result: "WARNING",
+          severity: "WARNING",
+          details: "Dedicated GATEWAY_HEALTH_TELEMETRY is not implemented for Phase 6.4C hardware bring-up",
+          evidence: { source: "gatewayHealth", value: false },
+        }),
+        rule({
+          rule_id: "GATEWAY_NODE_HEALTH",
+          label: "Pi gateway node health",
+          category: "GATEWAY",
+          result: "WARNING",
+          severity: "WARNING",
+          details: "Pi backend is reachable over WebSocket, but dedicated gateway node telemetry is pending",
+          evidence: {
+            source: "deviceRegistry.pi_gateway",
+            value: piGateway?.health_state ?? null,
+          },
+        }),
+      ];
+    }
+
     return [
       rule({
         rule_id: "GATEWAY_TELEMETRY_PRESENT",
@@ -343,12 +429,17 @@ function gatewayRules(
 function linkRules(
   linkRegistry: LinkRegistry,
   connectionState: ConnectionState,
+  hardwareBringupMode: boolean,
   nowMs?: number
 ): HealthCheckRule[] {
   return [
-    ...rulesForLink("LAPTOP_PI", linkRegistry[LINK_IDS.LAPTOP_PI], connectionState, nowMs),
+    ...(hardwareBringupMode
+      ? bringupLinkWarningRules("LAPTOP_PI", linkRegistry[LINK_IDS.LAPTOP_PI], "Laptop / Pi WebSocket reachability is validated by stream connection state")
+      : rulesForLink("LAPTOP_PI", linkRegistry[LINK_IDS.LAPTOP_PI], connectionState, nowMs)),
     ...rulesForLink("PI_MAIN", linkRegistry[LINK_IDS.PI_MAIN], connectionState, nowMs),
-    ...rulesForLink("MAIN_SUB", linkRegistry[LINK_IDS.MAIN_SUB], connectionState, nowMs),
+    ...(hardwareBringupMode
+      ? bringupLinkWarningRules("MAIN_SUB", linkRegistry[LINK_IDS.MAIN_SUB], "SUB ESP32-S3 is not connected or in scope for Phase 6.4C")
+      : rulesForLink("MAIN_SUB", linkRegistry[LINK_IDS.MAIN_SUB], connectionState, nowMs)),
   ];
 }
 
@@ -425,6 +516,39 @@ function rulesForLink(
       evidence: {
         source: `${link.link_id}.missed_heartbeat_count`,
         value: link.missed_heartbeat_count,
+      },
+    }),
+  ];
+}
+
+function bringupLinkWarningRules(
+  id: string,
+  link: LinkRegistryEntry | undefined,
+  details: string
+): HealthCheckRule[] {
+  return [
+    rule({
+      rule_id: `LINK_${id}_HEALTH`,
+      label: link ? `${link.display_name} health` : `${id} link health`,
+      category: "LINK",
+      result: "WARNING",
+      severity: "WARNING",
+      details,
+      evidence: {
+        source: link?.link_id ?? `linkRegistry.${id}`,
+        value: link?.link_state ?? null,
+      },
+    }),
+    rule({
+      rule_id: `LINK_${id}_SYNC`,
+      label: link ? `${link.display_name} sync` : `${id} link sync`,
+      category: "LINK",
+      result: "WARNING",
+      severity: "WARNING",
+      details,
+      evidence: {
+        source: link?.link_id ?? `linkRegistry.${id}`,
+        value: link?.sync_state ?? null,
       },
     }),
   ];
@@ -687,6 +811,28 @@ function nodeRule(
   device: DeviceRegistryEntry | undefined,
 ): HealthCheckRule {
   return requiredNodeRule(rule_id, label, device, "NODE");
+}
+
+function bringupWarningRule(
+  rule_id: string,
+  label: string,
+  category: HealthCheckCategory,
+  details: string,
+  device: DeviceRegistryEntry | undefined
+): HealthCheckRule {
+  return rule({
+    rule_id,
+    label,
+    category,
+    result: "WARNING",
+    severity: "WARNING",
+    details,
+    evidence: {
+      source: device?.device_id ?? "phase_6_4c_scope",
+      timestamp_utc: device?.last_seen_utc ?? null,
+      value: device?.health_state ?? "NOT_IN_SCOPE",
+    },
+  });
 }
 
 function laptopSupervisionResult(

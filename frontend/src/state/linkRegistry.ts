@@ -62,24 +62,24 @@ export function createInitialLinkRegistry(): LinkRegistry {
 
 export function updateLinkRegistryFromHeartbeat(
   registry: LinkRegistry,
-  payload: LinkHeartbeatPayload
+  payload: LinkHeartbeatPayload,
+  observedAtUtc?: string
 ): LinkRegistry {
   const current = registry[payload.link_id];
   if (!current) return registry;
+  const heartbeatUtc = payload.last_seen_utc ?? observedAtUtc ?? new Date().toISOString();
 
   return {
     ...registry,
     [payload.link_id]: {
       ...current,
-      source_node_id: normalizeNodeId(payload.source_node_id),
-      target_node_id: normalizeNodeId(payload.target_node_id),
       link_state: payload.link_state,
       sync_state: payload.sync_state,
-      last_heartbeat_utc: payload.last_seen_utc,
+      last_heartbeat_utc: heartbeatUtc,
       heartbeat_age_ms: 0,
       round_trip_latency_ms: payload.round_trip_latency_ms,
       missed_heartbeat_count: payload.missed_heartbeat_count,
-      status_message: `${payload.link_state} / ${payload.sync_state}`,
+      status_message: `${payload.link_state} / ${payload.sync_state} reported by ${normalizeNodeId(payload.source_node_id)}`,
     },
   };
 }
@@ -102,10 +102,8 @@ export function updateLinkRegistryFromSync(
     ...registry,
     [payload.link_id]: {
       ...current,
-      source_node_id: normalizeNodeId(payload.source_node_id),
-      target_node_id: normalizeNodeId(payload.target_node_id),
       sync_state: payload.sync_state,
-      status_message: statusMessage,
+      status_message: `${statusMessage} reported by ${normalizeNodeId(payload.source_node_id)}`,
     },
   };
 }

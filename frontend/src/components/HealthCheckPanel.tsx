@@ -27,6 +27,7 @@ export function HealthCheckPanel() {
   const sequenceGaps = useTelemetryStore((s) => s.sequenceGaps);
   const sequenceResets = useTelemetryStore((s) => s.sequenceResets);
   const streamSwitches = useTelemetryStore((s) => s.streamSwitches);
+  const activeTelemetrySource = useTelemetryStore((s) => s.activeTelemetrySource);
 
   const result = evaluateV1PlusHealthCheck({
     deviceRegistry,
@@ -41,6 +42,7 @@ export function HealthCheckPanel() {
     sequenceGaps,
     sequenceResets,
     streamSwitches,
+    hardwareBringupMode: !activeTelemetrySource.is_simulated,
   });
 
   return (

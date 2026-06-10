@@ -18,7 +18,7 @@ void setup() {
   Serial.println("NOVA SC MAIN ESP32 telemetry firmware boot");
   Serial.println("Phase 6.3 dry validation mode");
   Serial.println("USB debug active");
-  Serial.println("Telemetry UART active on configured GPIO pins");
+  Serial.println("Telemetry UART active on NOVA B1 J2 PI_CTRL_IF");
   Serial.flush();
 
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);

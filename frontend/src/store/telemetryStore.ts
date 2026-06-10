@@ -477,7 +477,8 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       if (packet.event_type === "LINK_HEARTBEAT_TELEMETRY") {
         linkRegistry = updateLinkRegistryFromHeartbeat(
           linkRegistry,
-          packet.payload
+          packet.payload,
+          packet.timestamp_utc
         );
       }
 

@@ -35,20 +35,26 @@ USB `Serial` is used for debug logs. The dedicated Pi UART emits JSON telemetry 
 
 Use 3.3V logic only.
 
+NOVA B1 J2 `PI_CTRL_IF` uses board-routed `MCU_UART_TX` / `MCU_UART_RX`
+connected to the ESP32-S3 TXD0 / RXD0 UART0 path. For Phase 6.4C, the
+Raspberry Pi RX must connect to the J2 Pi UART receive path, not the old
+GPIO17 dry-validation candidate pin.
+
 ```text
-Raspberry Pi TX GPIO14  -> ESP32 RX
-Raspberry Pi RX GPIO15  <- ESP32 TX
+Raspberry Pi TX GPIO14  -> J2 MCU_UART_RX / ESP32 RXD0
+Raspberry Pi RX GPIO15  <- J2 MCU_UART_TX / ESP32 TXD0
 Raspberry Pi GND        -> ESP32 GND
 ```
 
-Default candidate ESP32-S3 UART pins:
+NOVA B1 ESP32-S3 UART0 telemetry pins:
 
 ```text
-MAIN_PI_UART_TX_PIN = 17
-MAIN_PI_UART_RX_PIN = 18
+MAIN_PI_UART_TX_PIN = 43  // ESP32-S3 TXD0 / board-routed MCU_UART_TX
+MAIN_PI_UART_RX_PIN = 44  // ESP32-S3 RXD0 / board-routed MCU_UART_RX
 ```
 
-These pins are configurable in `src/board_config.h` and must be confirmed against the final board pin map before hardware validation.
+These pins are configured in `src/board_config.h` for NOVA B1 J2
+`PI_CTRL_IF` routing. USB debug output remains on native USB CDC `Serial`.
 
 ## Packet Envelope
 

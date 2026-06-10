@@ -31,10 +31,10 @@ export type NovaScValidationReport = {
     app_name: "NOVA SC";
     nova_sc_phase: "PHASE_5_9";
     validation_engine_version: "V1_PLUS_TOPOLOGY_AWARE";
-    simulator_mode: true;
-    hardware_connected: false;
-    validation_scope: "SUPERVISORY_SIMULATION";
-    physical_hardware_validation: false;
+    simulator_mode: boolean;
+    hardware_connected: boolean;
+    validation_scope: "SUPERVISORY_SIMULATION" | "PHASE_6_4C_HARDWARE_BRINGUP";
+    physical_hardware_validation: boolean;
     active_stream_id: string | null;
     backend_stream_id: string | null;
     active_source_id: string;
@@ -205,6 +205,7 @@ export function buildNovaScValidationReport(params: {
     sequenceGaps: params.sequenceGaps,
     sequenceResets: params.sequenceResets,
     streamSwitches: params.streamSwitches,
+    hardwareBringupMode: !params.activeTelemetrySource.is_simulated,
   });
   const links = Object.values(params.linkRegistry);
   const offlineLinks = links
@@ -246,10 +247,12 @@ export function buildNovaScValidationReport(params: {
       app_name: "NOVA SC",
       nova_sc_phase: "PHASE_5_9",
       validation_engine_version: "V1_PLUS_TOPOLOGY_AWARE",
-      simulator_mode: true,
-      hardware_connected: false,
-      validation_scope: "SUPERVISORY_SIMULATION",
-      physical_hardware_validation: false,
+      simulator_mode: params.activeTelemetrySource.is_simulated,
+      hardware_connected: !params.activeTelemetrySource.is_simulated,
+      validation_scope: params.activeTelemetrySource.is_simulated
+        ? "SUPERVISORY_SIMULATION"
+        : "PHASE_6_4C_HARDWARE_BRINGUP",
+      physical_hardware_validation: !params.activeTelemetrySource.is_simulated,
       active_stream_id: params.activeStreamId,
       backend_stream_id: params.activeStreamId,
       active_source_id: params.activeTelemetrySource.source_id,
