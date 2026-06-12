@@ -24,6 +24,7 @@ static constexpr const char *NODE_ROLE = "SAFETY_QC";
 static constexpr const char *FIRMWARE_VERSION = "sub-fw-hw-0.1.0";
 
 static constexpr const char *LINK_MAIN_SUB = "link_main_sub";
+static constexpr uint32_t SUB_TELEMETRY_MIN_PACKET_SPACING_MS = 75;
 static constexpr uint32_t NODE_HEALTH_INTERVAL_MS = 1000;
 static constexpr uint32_t LINK_HEARTBEAT_INTERVAL_MS = 500;
 static constexpr uint32_t LINK_SYNC_INTERVAL_MS = 2000;

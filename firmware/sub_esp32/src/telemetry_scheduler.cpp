@@ -7,20 +7,44 @@ TelemetryScheduler::TelemetryScheduler(Stream &telemetryPort)
       heartbeatSequenceNumber_(1),
       lastNodeHealthMs_(0),
       lastLinkHeartbeatMs_(0),
-      lastLinkSyncMs_(0) {}
+      lastLinkSyncMs_(0),
+      lastTelemetryEmitMs_(0) {}
 
 void TelemetryScheduler::begin() {
   const uint32_t nowMs = millis();
   lastNodeHealthMs_ = nowMs - NODE_HEALTH_INTERVAL_MS;
   lastLinkHeartbeatMs_ = nowMs - LINK_HEARTBEAT_INTERVAL_MS;
   lastLinkSyncMs_ = nowMs - LINK_SYNC_INTERVAL_MS;
+  lastTelemetryEmitMs_ = nowMs - SUB_TELEMETRY_MIN_PACKET_SPACING_MS;
 }
 
 void TelemetryScheduler::update() {
   const uint32_t nowMs = millis();
-  maybeEmit(nowMs, lastLinkHeartbeatMs_, LINK_HEARTBEAT_INTERVAL_MS, &TelemetryScheduler::emitLinkHeartbeat);
-  maybeEmit(nowMs, lastNodeHealthMs_, NODE_HEALTH_INTERVAL_MS, &TelemetryScheduler::emitNodeHealth);
-  maybeEmit(nowMs, lastLinkSyncMs_, LINK_SYNC_INTERVAL_MS, &TelemetryScheduler::emitLinkSync);
+
+  if (nowMs - lastTelemetryEmitMs_ < SUB_TELEMETRY_MIN_PACKET_SPACING_MS) {
+    return;
+  }
+
+  if (nowMs - lastLinkHeartbeatMs_ >= LINK_HEARTBEAT_INTERVAL_MS) {
+    lastLinkHeartbeatMs_ = nowMs;
+    lastTelemetryEmitMs_ = nowMs;
+    emitLinkHeartbeat();
+    return;
+  }
+
+  if (nowMs - lastNodeHealthMs_ >= NODE_HEALTH_INTERVAL_MS) {
+    lastNodeHealthMs_ = nowMs;
+    lastTelemetryEmitMs_ = nowMs;
+    emitNodeHealth();
+    return;
+  }
+
+  if (nowMs - lastLinkSyncMs_ >= LINK_SYNC_INTERVAL_MS) {
+    lastLinkSyncMs_ = nowMs;
+    lastTelemetryEmitMs_ = nowMs;
+    emitLinkSync();
+    return;
+  }
 }
 
 void TelemetryScheduler::maybeEmit(

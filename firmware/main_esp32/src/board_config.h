@@ -21,6 +21,8 @@ static constexpr int MAIN_SUB_UART_RX_PIN = 47;
 static constexpr int MAIN_SUB_UART_TX_PIN = -1;
 static constexpr uint32_t MAIN_SUB_UART_BAUD = 115200;
 static constexpr size_t SUB_FORWARD_MAX_LINE_LENGTH = 1024;
+static constexpr size_t SUB_FORWARD_RX_BUFFER_SIZE = 4096;
+static constexpr size_t SUB_FORWARD_MAX_BYTES_PER_LOOP = 512;
 
 static constexpr const char *HW_SCHEMA_VERSION = "hw.v1";
 static constexpr const char *SOURCE_NODE_ID = "esp32_main";

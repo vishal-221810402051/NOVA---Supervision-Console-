@@ -2,6 +2,8 @@
 
 #include "board_config.h"
 
+#include <string.h>
+
 extern HardwareSerial PiTelemetrySerial;
 
 HardwareSerial SubTelemetrySerial(MAIN_SUB_UART_PORT);
@@ -12,16 +14,20 @@ static bool discardUntilNewline = false;
 static uint32_t subForwardedLineCount = 0;
 static uint32_t subDroppedLineCount = 0;
 static uint32_t subOverlongLineCount = 0;
+static uint32_t subCorruptLineCount = 0;
 
 static void resetSubForwardBuffer();
 static void handleSubTelemetryByte(char c);
 static void forwardSubTelemetryLine(const char *line);
+static bool isSubTelemetryLineSane(const char *line);
+static bool containsToken(const char *line, const char *token);
 
 void setupSubTelemetryUart() {
   if (!SUB_FORWARDING_ENABLED) {
     return;
   }
 
+  SubTelemetrySerial.setRxBufferSize(SUB_FORWARD_RX_BUFFER_SIZE);
   SubTelemetrySerial.begin(
       MAIN_SUB_UART_BAUD,
       SERIAL_8N1,
@@ -36,9 +42,18 @@ void processSubTelemetryForwarding() {
     return;
   }
 
-  while (SubTelemetrySerial.available() > 0) {
-    const char c = static_cast<char>(SubTelemetrySerial.read());
+  size_t bytesProcessed = 0;
+  while (
+      SubTelemetrySerial.available() > 0 &&
+      bytesProcessed < SUB_FORWARD_MAX_BYTES_PER_LOOP) {
+    const int value = SubTelemetrySerial.read();
+    if (value < 0) {
+      break;
+    }
+
+    const char c = static_cast<char>(value);
     handleSubTelemetryByte(c);
+    bytesProcessed++;
   }
 }
 
@@ -86,6 +101,14 @@ static void handleSubTelemetryByte(char c) {
       return;
     }
 
+    if (!isSubTelemetryLineSane(subLineBuffer)) {
+      subDroppedLineCount++;
+      subCorruptLineCount++;
+      Serial.println("[MAIN][SUB_UART][WARN] dropped corrupt SUB telemetry line");
+      resetSubForwardBuffer();
+      return;
+    }
+
     forwardSubTelemetryLine(subLineBuffer);
     resetSubForwardBuffer();
     return;
@@ -109,4 +132,43 @@ static void forwardSubTelemetryLine(const char *line) {
 #endif
 
   subForwardedLineCount++;
+}
+
+static bool isSubTelemetryLineSane(const char *line) {
+  if (!containsToken(line, "\"schema_version\":\"hw.v1\"")) {
+    return false;
+  }
+  if (!containsToken(line, "\"source_node_id\":\"esp32_sub\"")) {
+    return false;
+  }
+  if (!containsToken(line, "\"packet_type\":")) {
+    return false;
+  }
+
+  if (containsToken(line, "\"packet_type\":\"NODE_HEALTH\"")) {
+    return containsToken(line, "\"firmware_version\"") &&
+           containsToken(line, "\"reset_reason\"") &&
+           containsToken(line, "\"free_heap_bytes\"") &&
+           containsToken(line, "\"brownout_count\"") &&
+           containsToken(line, "\"status_message\"") &&
+           !containsToken(line, "\"sync_state\"");
+  }
+
+  if (containsToken(line, "\"packet_type\":\"LINK_SYNC\"")) {
+    return containsToken(line, "\"sync_state\"") &&
+           containsToken(line, "\"stream_consistent\"") &&
+           containsToken(line, "\"source_sequence_continuous\"");
+  }
+
+  if (containsToken(line, "\"packet_type\":\"LINK_HEARTBEAT\"")) {
+    return containsToken(line, "\"heartbeat_sequence_number\"") &&
+           containsToken(line, "\"heartbeat_interval_ms\"") &&
+           containsToken(line, "\"link_state\"");
+  }
+
+  return false;
+}
+
+static bool containsToken(const char *line, const char *token) {
+  return strstr(line, token) != nullptr;
 }

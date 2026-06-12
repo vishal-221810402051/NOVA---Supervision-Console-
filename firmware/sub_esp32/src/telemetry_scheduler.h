@@ -27,4 +27,5 @@ class TelemetryScheduler {
   uint32_t lastNodeHealthMs_;
   uint32_t lastLinkHeartbeatMs_;
   uint32_t lastLinkSyncMs_;
+  uint32_t lastTelemetryEmitMs_;
 };
