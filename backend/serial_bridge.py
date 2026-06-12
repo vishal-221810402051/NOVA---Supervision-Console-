@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any
 
 from gateway_state import GatewayState
 from hardware_normalizer import normalize_hardware_packet
-from hardware_validator import parse_uart_json_line, validate_raw_hardware_packet
+from hardware_validator import (
+    HardwareValidationRejection,
+    parse_uart_json_line,
+    validate_raw_hardware_packet,
+)
 from protocol import build_integrity_event_packet
+
+STARTUP_GRACE_SECONDS = 2.0
+STARTUP_SETTLE_SECONDS = 0.2
 
 
 class SerialBridge:
@@ -25,6 +33,8 @@ class SerialBridge:
         self._task: asyncio.Task | None = None
         self._running = False
         self._serial = None
+        self._startup_fragment_count = 0
+        self._boundary_fragment_count = 0
 
     def start(self) -> None:
         if self._task is None or self._task.done():
@@ -83,6 +93,7 @@ class SerialBridge:
                 hardware_connected=True,
                 bridge_status="SERIAL_CONNECTED",
             )
+            await self._prepare_serial_stream()
         except Exception as exc:
             self.state.set_serial_status(
                 serial_connected=False,
@@ -92,9 +103,11 @@ class SerialBridge:
             )
             return
 
+        serial_started_at = time.monotonic()
+
         while self._running:
             try:
-                line = await asyncio.to_thread(self._serial.readline)
+                raw_line = await asyncio.to_thread(self._serial.readline)
             except Exception as exc:
                 self.state.set_serial_status(
                     serial_connected=False,
@@ -113,11 +126,29 @@ class SerialBridge:
                 await asyncio.sleep(1)
                 continue
 
+            if not raw_line:
+                self._mark_waiting_if_no_hardware_seen()
+                continue
+
+            line = self._decode_uart_line(raw_line)
             if not line:
-                self.state.set_serial_status(
-                    serial_connected=True,
-                    hardware_connected=True,
-                    bridge_status="WAITING_FOR_HARDWARE_PACKETS",
+                continue
+
+            in_startup_grace = (
+                time.monotonic() - serial_started_at < STARTUP_GRACE_SECONDS
+            )
+            if not _has_json_object_boundary(line):
+                if in_startup_grace:
+                    self._startup_fragment_count += 1
+                    continue
+
+                self._boundary_fragment_count += 1
+                await self._emit_rejection(
+                    HardwareValidationRejection(
+                        reason="INVALID_JSON",
+                        severity="WARNING",
+                        details="UART line was not valid JSON boundary",
+                    )
                 )
                 continue
 
@@ -131,7 +162,46 @@ class SerialBridge:
                 await self._emit_rejection(validation_rejection)
                 continue
 
-            await self.output_queue.put(normalize_hardware_packet(packet, self.state))
+            normalized_packet = normalize_hardware_packet(packet, self.state)
+            self.state.set_serial_status(
+                serial_connected=True,
+                hardware_connected=True,
+                bridge_status="SERIAL_CONNECTED",
+            )
+            await self.output_queue.put(normalized_packet)
+
+    async def _prepare_serial_stream(self) -> None:
+        try:
+            await asyncio.to_thread(self._serial.reset_input_buffer)
+        except Exception:
+            pass
+
+        await asyncio.sleep(STARTUP_SETTLE_SECONDS)
+
+        try:
+            await asyncio.to_thread(self._serial.readline)
+        except Exception:
+            pass
+
+    def _decode_uart_line(self, raw_line: bytes | str) -> str:
+        if isinstance(raw_line, bytes):
+            return raw_line.decode("utf-8", errors="replace").strip()
+
+        return raw_line.strip()
+
+    def _mark_waiting_if_no_hardware_seen(self) -> None:
+        status = self.state.to_health_status()
+        if (
+            status["last_esp32_main_packet_utc"] is not None
+            or status["last_esp32_sub_packet_utc"] is not None
+        ):
+            return
+
+        self.state.set_serial_status(
+            serial_connected=True,
+            hardware_connected=True,
+            bridge_status="WAITING_FOR_HARDWARE_PACKETS",
+        )
 
     async def _emit_rejection(self, rejection) -> None:
         self.state.record_malformed_packet(rejection.details)
@@ -145,3 +215,7 @@ class SerialBridge:
                 affected_sequence_number=rejection.source_sequence_number,
             )
         )
+
+
+def _has_json_object_boundary(line: str) -> bool:
+    return line.startswith("{") and line.endswith("}")
