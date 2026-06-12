@@ -10,6 +10,7 @@ from protocol import (
     build_gateway_health_packet as build_hardware_gateway_health_packet,
 )
 from serial_bridge import SerialBridge
+from hardware_stream_manager import HardwareStreamManager
 
 app = FastAPI(title="NOVA SC Backend", version="0.1.0")
 
@@ -39,6 +40,7 @@ hardware_gateway_state = GatewayState(
 )
 hardware_packet_queue: asyncio.Queue[dict] = asyncio.Queue()
 serial_bridge: SerialBridge | None = None
+hardware_stream_manager: HardwareStreamManager | None = None
 
 NODE_IDS = {
     "LAPTOP_CONSOLE": "laptop_console",
@@ -70,7 +72,7 @@ LINK_HEARTBEAT_COUNTERS = {
 
 @app.on_event("startup")
 async def startup():
-    global serial_bridge
+    global serial_bridge, hardware_stream_manager
     if BACKEND_MODE != "hardware":
         hardware_gateway_state.set_serial_status(
             serial_connected=False,
@@ -85,6 +87,13 @@ async def startup():
         serial_port=SERIAL_PORT,
         baud=SERIAL_BAUD,
     )
+    hardware_stream_manager = HardwareStreamManager(
+        source_queue=hardware_packet_queue,
+        gateway_state=hardware_gateway_state,
+        gateway_health_builder=build_hardware_gateway_health_packet,
+        gateway_interval_seconds=1.0,
+    )
+    await hardware_stream_manager.start()
     serial_bridge.start()
 
 
@@ -92,6 +101,8 @@ async def startup():
 async def shutdown():
     if serial_bridge is not None:
         await serial_bridge.stop()
+    if hardware_stream_manager is not None:
+        await hardware_stream_manager.stop()
 
 
 def utc_now():
@@ -343,23 +354,20 @@ def health():
 
 
 async def stream_hardware_packets(websocket: WebSocket):
-    gateway_health_interval_seconds = 1.0
-    next_gateway_health_at = 0.0
-
-    while True:
-        loop_time = asyncio.get_running_loop().time()
-        if loop_time >= next_gateway_health_at:
+    if hardware_stream_manager is None:
+        while True:
             await websocket.send_json(
                 build_hardware_gateway_health_packet(hardware_gateway_state)
             )
-            next_gateway_health_at = loop_time + gateway_health_interval_seconds
+            await asyncio.sleep(1)
 
-        try:
-            timeout = max(0.0, min(0.1, next_gateway_health_at - loop_time))
-            packet = await asyncio.wait_for(hardware_packet_queue.get(), timeout=timeout)
+    subscriber_queue = await hardware_stream_manager.subscribe()
+    try:
+        while True:
+            packet = await subscriber_queue.get()
             await websocket.send_json(packet)
-        except asyncio.TimeoutError:
-            continue
+    finally:
+        await hardware_stream_manager.unsubscribe(subscriber_queue)
 
 
 @app.websocket("/ws/telemetry")

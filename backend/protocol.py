@@ -129,16 +129,22 @@ def build_integrity_event_packet(
     details: str,
     affected_source_node_id: str | None = None,
     affected_sequence_number: int | None = None,
+    diagnostic_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    payload = {
+        "anomaly_type": anomaly_type,
+        "severity": severity,
+        "affected_stream_id": state.stream_id,
+        "affected_source_node_id": affected_source_node_id,
+        "affected_sequence_number": affected_sequence_number,
+        "details": details,
+    }
+
+    if diagnostic_metadata:
+        payload.update(diagnostic_metadata)
+
     return {
         **build_packet_metadata(state=state, source_node_id=NODE_IDS["PI_GATEWAY"]),
         "event_type": "TELEMETRY_INTEGRITY_EVENT",
-        "payload": {
-            "anomaly_type": anomaly_type,
-            "severity": severity,
-            "affected_stream_id": state.stream_id,
-            "affected_source_node_id": affected_source_node_id,
-            "affected_sequence_number": affected_sequence_number,
-            "details": details,
-        },
+        "payload": payload,
     }

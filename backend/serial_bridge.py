@@ -121,6 +121,15 @@ class SerialBridge:
                         anomaly_type="MALFORMED_PACKET",
                         severity="ERROR",
                         details=f"UART read failed: {exc}",
+                        diagnostic_metadata={
+                            "source": "serial_bridge",
+                            "reason": "SERIAL_READ_FAILED",
+                            "raw_length": 0,
+                            "safe_preview": "",
+                            "boundary_valid": False,
+                            "parser_stage": "read",
+                            "decode_error": str(exc),
+                        },
                     )
                 )
                 await asyncio.sleep(1)
@@ -130,7 +139,8 @@ class SerialBridge:
                 self._mark_waiting_if_no_hardware_seen()
                 continue
 
-            line = self._decode_uart_line(raw_line)
+            raw_length = _raw_length(raw_line)
+            line, decode_error = self._decode_uart_line(raw_line)
             if not line:
                 continue
 
@@ -148,18 +158,37 @@ class SerialBridge:
                         reason="INVALID_JSON",
                         severity="WARNING",
                         details="UART line was not valid JSON boundary",
-                    )
+                    ),
+                    raw_line=line,
+                    raw_length=raw_length,
+                    boundary_valid=False,
+                    parser_stage="boundary",
+                    decode_error=decode_error,
                 )
                 continue
 
             raw, parse_rejection = parse_uart_json_line(line)
             if parse_rejection:
-                await self._emit_rejection(parse_rejection)
+                await self._emit_rejection(
+                    parse_rejection,
+                    raw_line=line,
+                    raw_length=raw_length,
+                    boundary_valid=True,
+                    parser_stage="json_parse",
+                    decode_error=decode_error,
+                )
                 continue
 
             packet, validation_rejection = validate_raw_hardware_packet(raw)
             if validation_rejection:
-                await self._emit_rejection(validation_rejection)
+                await self._emit_rejection(
+                    validation_rejection,
+                    raw_line=line,
+                    raw_length=raw_length,
+                    boundary_valid=True,
+                    parser_stage="schema_validate",
+                    decode_error=decode_error,
+                )
                 continue
 
             normalized_packet = normalize_hardware_packet(packet, self.state)
@@ -183,11 +212,14 @@ class SerialBridge:
         except Exception:
             pass
 
-    def _decode_uart_line(self, raw_line: bytes | str) -> str:
+    def _decode_uart_line(self, raw_line: bytes | str) -> tuple[str, str | None]:
         if isinstance(raw_line, bytes):
-            return raw_line.decode("utf-8", errors="replace").strip()
+            try:
+                return raw_line.decode("utf-8").strip(), None
+            except UnicodeDecodeError as exc:
+                return raw_line.decode("utf-8", errors="replace").strip(), str(exc)
 
-        return raw_line.strip()
+        return raw_line.strip(), None
 
     def _mark_waiting_if_no_hardware_seen(self) -> None:
         status = self.state.to_health_status()
@@ -203,8 +235,28 @@ class SerialBridge:
             bridge_status="WAITING_FOR_HARDWARE_PACKETS",
         )
 
-    async def _emit_rejection(self, rejection) -> None:
+    async def _emit_rejection(
+        self,
+        rejection,
+        *,
+        raw_line: bytes | str | None,
+        raw_length: int,
+        boundary_valid: bool,
+        parser_stage: str,
+        decode_error: str | None = None,
+    ) -> None:
         self.state.record_malformed_packet(rejection.details)
+        diagnostic_metadata = {
+            "source": "serial_bridge",
+            "reason": rejection.reason,
+            "raw_length": raw_length,
+            "safe_preview": _safe_preview(raw_line),
+            "boundary_valid": boundary_valid,
+            "parser_stage": parser_stage,
+        }
+        if decode_error:
+            diagnostic_metadata["decode_error"] = decode_error
+
         await self.output_queue.put(
             build_integrity_event_packet(
                 state=self.state,
@@ -213,9 +265,37 @@ class SerialBridge:
                 details=f"{rejection.reason}: {rejection.details}",
                 affected_source_node_id=rejection.source_node_id,
                 affected_sequence_number=rejection.source_sequence_number,
+                diagnostic_metadata=diagnostic_metadata,
             )
         )
 
 
 def _has_json_object_boundary(line: str) -> bool:
     return line.startswith("{") and line.endswith("}")
+
+
+def _raw_length(raw_line: bytes | str | None) -> int:
+    if raw_line is None:
+        return 0
+    return len(raw_line)
+
+
+def _safe_preview(raw_line: bytes | str | None, max_length: int = 240) -> str:
+    if raw_line is None:
+        return ""
+
+    if isinstance(raw_line, bytes):
+        text = raw_line.decode("utf-8", errors="replace")
+    else:
+        text = raw_line
+
+    filtered = "".join(
+        char if char in "\r\n\t" or ord(char) >= 32 else "?"
+        for char in text
+    )
+    filtered = filtered.replace("\r", "\\r").replace("\n", "\\n")
+
+    if len(filtered) <= max_length:
+        return filtered
+
+    return filtered[:max_length] + "...<truncated>"
