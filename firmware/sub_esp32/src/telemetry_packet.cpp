@@ -3,7 +3,8 @@
 #include "board_config.h"
 #include "esp_system.h"
 
-TelemetryPacketBuilder::TelemetryPacketBuilder() : sourceSequenceNumber_(1) {}
+TelemetryPacketBuilder::TelemetryPacketBuilder()
+    : sourceSequenceNumber_(1), droppedSerializationCount_(0) {}
 
 void TelemetryPacketBuilder::beginPacket(JsonDocument &doc, const char *packetType) {
   doc.clear();
@@ -17,9 +18,15 @@ void TelemetryPacketBuilder::beginPacket(JsonDocument &doc, const char *packetTy
 }
 
 void TelemetryPacketBuilder::emitPacket(JsonDocument &doc, Stream &telemetryPort) {
-  char line[512];
+  char line[SUB_TELEMETRY_LINE_BUFFER_SIZE];
   const size_t written = serializeJson(doc, line, sizeof(line));
-  if (written == 0 || written >= sizeof(line)) {
+  if (
+      written == 0 ||
+      written >= sizeof(line) - 1 ||
+      line[0] != '{' ||
+      line[written - 1] != '}') {
+    droppedSerializationCount_++;
+    Serial.println("[SUB][WARN] telemetry serialization overflow; packet dropped");
     return;
   }
 
@@ -29,6 +36,10 @@ void TelemetryPacketBuilder::emitPacket(JsonDocument &doc, Stream &telemetryPort
 
 uint32_t TelemetryPacketBuilder::nextSequenceNumber() {
   return sourceSequenceNumber_++;
+}
+
+uint32_t TelemetryPacketBuilder::droppedSerializationCount() const {
+  return droppedSerializationCount_;
 }
 
 const char *resetReasonToString() {

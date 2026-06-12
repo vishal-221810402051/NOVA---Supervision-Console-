@@ -67,6 +67,26 @@ SUB GND                     -> MAIN GND
 Do not connect MAIN TX to SUB RX during Phase 6.7A. Do not connect actuator
 power.
 
+## Phase 6.7C Serialization Buffer Hardening
+
+Phase 6.7C hardens SUB telemetry serialization after real UART diagnostics
+showed repeated truncated `esp32_sub` `NODE_HEALTH` lines. The firmware now uses
+a larger configured line buffer and blocks invalid/truncated JSON from being
+transmitted.
+
+Serialization safety behavior:
+
+- telemetry JSON is serialized once per packet
+- the same complete line is written to USB and physical TXD0
+- line buffer size is `1536` bytes
+- emitted lines must start with `{` and end with `}`
+- overflow or invalid-boundary lines are dropped instead of transmitted
+- overflow warnings print only to USB Serial
+- physical telemetry UART never receives debug text
+
+Packet schema, packet intervals, source/target IDs, and packet types are
+unchanged.
+
 ## Emitted Packet Types
 
 - `LINK_HEARTBEAT` every 500 ms

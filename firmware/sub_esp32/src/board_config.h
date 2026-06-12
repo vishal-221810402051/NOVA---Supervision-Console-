@@ -13,6 +13,10 @@ static constexpr int SUB_MAIN_UART_TX_PIN = 43;
 static constexpr int SUB_MAIN_UART_RX_PIN = -1;
 static constexpr uint32_t SUB_MAIN_UART_BAUD = 115200;
 
+// Phase 6.7C: prevent truncated NODE_HEALTH JSON from reaching USB/UART.
+static constexpr size_t SUB_TELEMETRY_JSON_BUFFER_SIZE = 1536;
+static constexpr size_t SUB_TELEMETRY_LINE_BUFFER_SIZE = 1536;
+
 static constexpr const char *HW_SCHEMA_VERSION = "hw.v1";
 static constexpr const char *SOURCE_NODE_ID = "esp32_sub";
 static constexpr const char *TARGET_NODE_ID = "esp32_main";
