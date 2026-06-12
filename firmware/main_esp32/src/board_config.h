@@ -11,6 +11,17 @@ static constexpr int MAIN_PI_UART_TX_PIN = 43;
 static constexpr int MAIN_PI_UART_RX_PIN = 44;
 static constexpr uint32_t MAIN_PI_UART_BAUD = 115200;
 
+// Phase 6.7: one-way SUB telemetry bridge.
+// U10 SUB TXD0 / SUB_TO_MAIN_UART -> U9 MAIN IO47 / SUB_TO_MAIN_UART.
+// MAIN TX to SUB is intentionally disabled in Phase 6.7.
+// Future bidirectional path is U9 IO46 / MAIN_TO_SUB_UART -> U10 RXD0.
+static constexpr bool SUB_FORWARDING_ENABLED = true;
+static constexpr int MAIN_SUB_UART_PORT = 1;
+static constexpr int MAIN_SUB_UART_RX_PIN = 47;
+static constexpr int MAIN_SUB_UART_TX_PIN = -1;
+static constexpr uint32_t MAIN_SUB_UART_BAUD = 115200;
+static constexpr size_t SUB_FORWARD_MAX_LINE_LENGTH = 1024;
+
 static constexpr const char *HW_SCHEMA_VERSION = "hw.v1";
 static constexpr const char *SOURCE_NODE_ID = "esp32_main";
 static constexpr const char *TARGET_NODE_ID = "pi_gateway";

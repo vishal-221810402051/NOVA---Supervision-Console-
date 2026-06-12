@@ -11,7 +11,7 @@ SUB to MAIN.
 - Target node: `esp32_main`
 - Role: `SAFETY_QC`
 - Raw schema: `hw.v1`
-- Transport for Phase 6.6: USB Serial only
+- Transport for Phase 6.7A: USB Serial plus physical TXD0 to MAIN
 - Framing: one UTF-8 JSON object per line
 - Baud: `115200`
 
@@ -34,6 +34,38 @@ This firmware does not implement:
 - command parser
 - command receiver logic
 - GPIO actuator writes
+
+## Phase 6.7A Physical UART Output
+
+Phase 6.7A keeps the validated USB telemetry output and also emits the same
+newline-delimited `hw.v1` JSON lines on the SUB physical TXD0 path.
+
+Confirmed NOVA B1 routing:
+
+```text
+SUB U10 TXD0 / SUB_TO_MAIN_UART -> MAIN U9 GPIO47 / SUB_TO_MAIN_UART
+```
+
+Firmware configuration:
+
+```text
+SUB_MAIN_UART_PORT = 0
+SUB_MAIN_UART_TX_PIN = 43
+SUB_MAIN_UART_RX_PIN = -1
+SUB_MAIN_UART_BAUD = 115200
+```
+
+SUB RX is intentionally disabled in this phase. No command path exists.
+
+Phase 6.7A wiring:
+
+```text
+SUB TXD0 / SUB_TO_MAIN_UART -> MAIN GPIO47 / SUB_TO_MAIN_UART
+SUB GND                     -> MAIN GND
+```
+
+Do not connect MAIN TX to SUB RX during Phase 6.7A. Do not connect actuator
+power.
 
 ## Emitted Packet Types
 

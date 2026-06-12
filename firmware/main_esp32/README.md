@@ -104,6 +104,50 @@ No writes are performed during I2C validation. The firmware does not set RTC
 time, configure ADS1115 conversion mode, write PCA9685 MODE registers, enable
 PWM output, or drive actuator hardware.
 
+## Phase 6.7 MAIN / SUB UART Forwarding
+
+Phase 6.7 adds a telemetry-only forwarding bridge from the SUB ESP32-S3 to the
+Raspberry Pi stream through MAIN. MAIN receives complete newline-delimited
+`hw.v1` JSON lines from SUB on the second UART and forwards each accepted line
+unchanged to the Pi UART.
+
+Confirmed NOVA B1 routing:
+
+```text
+SUB U10 TXD0 / SUB_TO_MAIN_UART -> MAIN U9 GPIO47 / SUB_TO_MAIN_UART
+Future MAIN U9 GPIO46 / MAIN_TO_SUB_UART -> SUB U10 RXD0
+```
+
+Phase 6.7 uses one-way telemetry only:
+
+```text
+SUB TXD0 / SUB_TO_MAIN_UART -> MAIN GPIO47 / SUB_TO_MAIN_UART
+SUB GND                     -> MAIN GND
+```
+
+`MAIN_SUB_UART_TX_PIN = -1`, so MAIN TX to SUB is intentionally disabled for
+this phase. Do not connect MAIN TX to SUB RX during Phase 6.7.
+
+Forwarding behavior:
+
+- forwards only complete newline-delimited SUB JSON lines
+- ignores carriage returns
+- drops empty, malformed-boundary, or overlong lines
+- does not parse or rewrite SUB JSON
+- mirrors forwarded SUB lines to USB only when `TELEMETRY_MIRROR_TO_USB` is enabled
+- does not add a command path
+- does not add actuator logic
+- does not require backend, frontend, or SUB firmware changes
+
+Expected validation after wiring:
+
+- Pi `/health` `last_esp32_main_packet_utc` updates
+- Pi `/health` `last_esp32_sub_packet_utc` updates
+- `malformed_packet_count = 0`
+- `dropped_packet_count = 0`
+- frontend `esp32_sub = HEALTHY`
+- frontend `link_main_sub = LINK_HEALTHY / SYNCED`
+
 ## Build
 
 From this directory:

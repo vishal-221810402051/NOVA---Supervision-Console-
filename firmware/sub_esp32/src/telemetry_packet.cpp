@@ -17,7 +17,13 @@ void TelemetryPacketBuilder::beginPacket(JsonDocument &doc, const char *packetTy
 }
 
 void TelemetryPacketBuilder::emitPacket(JsonDocument &doc, Stream &telemetryPort) {
-  serializeJson(doc, telemetryPort);
+  char line[512];
+  const size_t written = serializeJson(doc, line, sizeof(line));
+  if (written == 0 || written >= sizeof(line)) {
+    return;
+  }
+
+  telemetryPort.write(reinterpret_cast<const uint8_t *>(line), written);
   telemetryPort.print('\n');
 }
 

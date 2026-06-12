@@ -4,6 +4,15 @@
 
 static constexpr uint32_t USB_SERIAL_BAUD = 115200;
 
+// Phase 6.7A: SUB telemetry is mirrored to physical TXD0.
+// U10 TXD0 / SUB_TO_MAIN_UART -> U9 MAIN IO47 / SUB_TO_MAIN_UART.
+// RX is intentionally disabled. No command path exists.
+static constexpr bool SUB_UART_OUTPUT_ENABLED = true;
+static constexpr int SUB_MAIN_UART_PORT = 0;
+static constexpr int SUB_MAIN_UART_TX_PIN = 43;
+static constexpr int SUB_MAIN_UART_RX_PIN = -1;
+static constexpr uint32_t SUB_MAIN_UART_BAUD = 115200;
+
 static constexpr const char *HW_SCHEMA_VERSION = "hw.v1";
 static constexpr const char *SOURCE_NODE_ID = "esp32_sub";
 static constexpr const char *TARGET_NODE_ID = "esp32_main";

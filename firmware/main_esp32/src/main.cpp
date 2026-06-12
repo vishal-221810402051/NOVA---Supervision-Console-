@@ -2,6 +2,7 @@
 #include <Wire.h>
 
 #include "board_config.h"
+#include "sub_uart_forwarder.h"
 #include "telemetry_scheduler.h"
 
 HardwareSerial PiTelemetrySerial(MAIN_PI_UART_PORT);
@@ -30,10 +31,12 @@ void setup() {
       SERIAL_8N1,
       MAIN_PI_UART_RX_PIN,
       MAIN_PI_UART_TX_PIN);
+  setupSubTelemetryUart();
 
   telemetryScheduler.begin();
 }
 
 void loop() {
+  processSubTelemetryForwarding();
   telemetryScheduler.update();
 }
