@@ -1,0 +1,102 @@
+{
+  "phase": "6.9",
+  "name": "Hardware Telemetry Validation Report + Baseline Lock",
+  "status": "VALIDATED_BASELINE",
+  "scope": "hardware_telemetry_only",
+  "architecture": {
+    "frontend": "laptop_console",
+    "gateway": "pi_gateway",
+    "serial_port": "/dev/serial0",
+    "baud": 115200,
+    "main_node": "esp32_main",
+    "sub_node": "esp32_sub"
+  },
+  "validated_nodes": [
+    "laptop_console",
+    "pi_gateway",
+    "esp32_main",
+    "esp32_sub"
+  ],
+  "validated_links": [
+    "link_laptop_pi",
+    "link_pi_main",
+    "link_main_sub"
+  ],
+  "validated_packet_types": [
+    "GATEWAY_HEALTH_TELEMETRY",
+    "NODE_HEALTH_TELEMETRY",
+    "LINK_HEARTBEAT_TELEMETRY",
+    "LINK_SYNC_TELEMETRY",
+    "POWER_HEALTH_TELEMETRY",
+    "CHIP_STATUS_TELEMETRY",
+    "TELEMETRY_INTEGRITY_EVENT"
+  ],
+  "known_good_conditions": {
+    "websocket_connected": true,
+    "telemetry_freshness": "LIVE",
+    "packet_integrity": "CLEAN",
+    "chain_health": "HEALTHY",
+    "links_healthy": "3/3",
+    "links_synced": "3/3",
+    "integrity_events": 0,
+    "malformed_packet_count": 0,
+    "dropped_packet_count": 0
+  },
+  "firmware_versions": {
+    "esp32_main": "main-fw-hw-0.1.0",
+    "esp32_sub": "sub-fw-hw-0.1.0"
+  },
+  "known_limitations": [
+    "Laptop node heartbeat is not implemented.",
+    "Power rail ADC measurement is not implemented.",
+    "FRAM is blocked/wrong IC pending.",
+    "PCA9685 AllCall is not an independent physical chip validation.",
+    "PCA9685 PWM is disabled.",
+    "No actuator control is implemented.",
+    "No command receiver is implemented.",
+    "No command parser is implemented.",
+    "MAIN-to-SUB command UART is disabled.",
+    "No safety interlock telemetry exists yet.",
+    "No watchdog/fail-safe validation has been performed yet.",
+    "Long-runtime validation is still pending."
+  ],
+  "disabled_features": [
+    "MAIN_TO_SUB_UART command path",
+    "command path",
+    "command receiver",
+    "command parser",
+    "PCA9685 PWM",
+    "actuator power control",
+    "motors",
+    "servos",
+    "steppers",
+    "pumps",
+    "valves",
+    "relays",
+    "heaters"
+  ],
+  "acceptance_evidence": {
+    "integrity_events": 0,
+    "malformed_packet_count": 0,
+    "dropped_packet_count": 0,
+    "gateway_malformed_values": "all 0",
+    "source_counts_confirmed": [
+      "esp32_main",
+      "esp32_sub",
+      "pi_gateway"
+    ],
+    "sub_examples_confirmed": [
+      "esp32_sub::NODE_HEALTH_TELEMETRY",
+      "esp32_sub::LINK_HEARTBEAT_TELEMETRY",
+      "esp32_sub::LINK_SYNC_TELEMETRY"
+    ]
+  },
+  "next_phases_not_enabled": [
+    "long-duration telemetry soak test",
+    "real power rail ADC telemetry",
+    "safety interlock telemetry",
+    "watchdog/failsafe validation",
+    "command authorization layer",
+    "actuator supervision only after safety validation"
+  ]
+}
