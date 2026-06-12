@@ -125,6 +125,7 @@ class SerialBridge:
                             "source": "serial_bridge",
                             "reason": "SERIAL_READ_FAILED",
                             "raw_length": 0,
+                            "decoded_length": 0,
                             "safe_preview": "",
                             "boundary_valid": False,
                             "parser_stage": "read",
@@ -141,6 +142,7 @@ class SerialBridge:
 
             raw_length = _raw_length(raw_line)
             line, decode_error = self._decode_uart_line(raw_line)
+            decoded_length = len(line)
             if not line:
                 continue
 
@@ -161,6 +163,7 @@ class SerialBridge:
                     ),
                     raw_line=line,
                     raw_length=raw_length,
+                    decoded_length=decoded_length,
                     boundary_valid=False,
                     parser_stage="boundary",
                     decode_error=decode_error,
@@ -173,6 +176,7 @@ class SerialBridge:
                     parse_rejection,
                     raw_line=line,
                     raw_length=raw_length,
+                    decoded_length=decoded_length,
                     boundary_valid=True,
                     parser_stage="json_parse",
                     decode_error=decode_error,
@@ -185,6 +189,7 @@ class SerialBridge:
                     validation_rejection,
                     raw_line=line,
                     raw_length=raw_length,
+                    decoded_length=decoded_length,
                     boundary_valid=True,
                     parser_stage="schema_validate",
                     decode_error=decode_error,
@@ -241,6 +246,7 @@ class SerialBridge:
         *,
         raw_line: bytes | str | None,
         raw_length: int,
+        decoded_length: int,
         boundary_valid: bool,
         parser_stage: str,
         decode_error: str | None = None,
@@ -250,12 +256,15 @@ class SerialBridge:
             "source": "serial_bridge",
             "reason": rejection.reason,
             "raw_length": raw_length,
+            "decoded_length": decoded_length,
             "safe_preview": _safe_preview(raw_line),
             "boundary_valid": boundary_valid,
             "parser_stage": parser_stage,
         }
         if decode_error:
             diagnostic_metadata["decode_error"] = decode_error
+        if rejection.metadata:
+            diagnostic_metadata.update(rejection.metadata)
 
         await self.output_queue.put(
             build_integrity_event_packet(
@@ -280,7 +289,7 @@ def _raw_length(raw_line: bytes | str | None) -> int:
     return len(raw_line)
 
 
-def _safe_preview(raw_line: bytes | str | None, max_length: int = 240) -> str:
+def _safe_preview(raw_line: bytes | str | None, max_length: int = 600) -> str:
     if raw_line is None:
         return ""
 
@@ -298,4 +307,10 @@ def _safe_preview(raw_line: bytes | str | None, max_length: int = 240) -> str:
     if len(filtered) <= max_length:
         return filtered
 
-    return filtered[:max_length] + "...<truncated>"
+    prefix_length = max_length // 2
+    suffix_length = max_length - prefix_length
+    return (
+        filtered[:prefix_length]
+        + f"...<truncated len={len(filtered)}>..."
+        + filtered[-suffix_length:]
+    )

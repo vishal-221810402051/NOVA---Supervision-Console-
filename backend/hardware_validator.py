@@ -14,6 +14,7 @@ class HardwareValidationRejection:
     details: str
     source_node_id: str | None = None
     source_sequence_number: int | None = None
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -55,11 +56,26 @@ def parse_uart_json_line(line: bytes | str) -> tuple[dict[str, Any] | None, Hard
 
     try:
         raw = json.loads(text)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
+        pos = exc.pos
+        doc = exc.doc
+        metadata = {
+            "json_error_message": exc.msg,
+            "json_error_pos": exc.pos,
+            "json_error_lineno": exc.lineno,
+            "json_error_colno": exc.colno,
+            "json_doc_length": len(doc),
+            "char_at_error": _safe_char(doc[pos]) if 0 <= pos < len(doc) else None,
+            "char_before_error": _safe_char(doc[pos - 1]) if pos > 0 else None,
+            "char_after_error": _safe_char(doc[pos + 1]) if pos + 1 < len(doc) else None,
+            "error_context_before": _safe_context(doc[max(0, pos - 80):pos]),
+            "error_context_after": _safe_context(doc[pos:min(len(doc), pos + 80)]),
+        }
         return None, HardwareValidationRejection(
             reason="INVALID_JSON",
             severity="ERROR",
             details="UART line was not valid JSON",
+            metadata=metadata,
         )
 
     if not _is_record(raw):
@@ -166,3 +182,21 @@ def validate_raw_hardware_packet(
         ),
         None,
     )
+
+
+def _safe_char(value: str) -> str:
+    if value == "\n":
+        return "\\n"
+    if value == "\r":
+        return "\\r"
+    if value == "\t":
+        return "\\t"
+    if value == "\x00":
+        return "\\x00"
+    if ord(value) < 32:
+        return f"\\x{ord(value):02x}"
+    return value
+
+
+def _safe_context(value: str) -> str:
+    return "".join(_safe_char(char) for char in value)
