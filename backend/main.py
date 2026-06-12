@@ -343,14 +343,23 @@ def health():
 
 
 async def stream_hardware_packets(websocket: WebSocket):
+    gateway_health_interval_seconds = 1.0
+    next_gateway_health_at = 0.0
+
     while True:
-        try:
-            packet = await asyncio.wait_for(hardware_packet_queue.get(), timeout=1)
-            await websocket.send_json(packet)
-        except asyncio.TimeoutError:
+        loop_time = asyncio.get_running_loop().time()
+        if loop_time >= next_gateway_health_at:
             await websocket.send_json(
                 build_hardware_gateway_health_packet(hardware_gateway_state)
             )
+            next_gateway_health_at = loop_time + gateway_health_interval_seconds
+
+        try:
+            timeout = max(0.0, min(0.1, next_gateway_health_at - loop_time))
+            packet = await asyncio.wait_for(hardware_packet_queue.get(), timeout=timeout)
+            await websocket.send_json(packet)
+        except asyncio.TimeoutError:
+            continue
 
 
 @app.websocket("/ws/telemetry")

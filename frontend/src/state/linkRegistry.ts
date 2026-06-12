@@ -5,6 +5,7 @@ import type {
   LinkSyncPayload,
   NodeId,
   SyncState,
+  ConnectionState,
   TransportKind,
 } from "../types/telemetry";
 import { normalizeNodeId } from "../types/telemetry";
@@ -104,6 +105,39 @@ export function updateLinkRegistryFromSync(
       ...current,
       sync_state: payload.sync_state,
       status_message: `${statusMessage} reported by ${normalizeNodeId(payload.source_node_id)}`,
+    },
+  };
+}
+
+export function updateLinkRegistryFromWebSocket(
+  registry: LinkRegistry,
+  connectionState: ConnectionState,
+  observedAtUtc: string
+): LinkRegistry {
+  const current = registry[LINK_IDS.LAPTOP_PI];
+  if (!current) return registry;
+
+  const connected = connectionState === "CONNECTED";
+  const recovering = connectionState === "CONNECTING" || connectionState === "RECONNECTING";
+
+  return {
+    ...registry,
+    [LINK_IDS.LAPTOP_PI]: {
+      ...current,
+      link_state: connected
+        ? "LINK_HEALTHY"
+        : recovering
+          ? "LINK_RECOVERING"
+          : "LINK_OFFLINE",
+      sync_state: connected ? "SYNCED" : "UNKNOWN",
+      last_heartbeat_utc: connected ? observedAtUtc : current.last_heartbeat_utc,
+      heartbeat_age_ms: connected ? 0 : current.heartbeat_age_ms,
+      missed_heartbeat_count: connected ? 0 : current.missed_heartbeat_count,
+      status_message: connected
+        ? "WebSocket-supervised laptop / Pi link is connected"
+        : recovering
+          ? `WebSocket-supervised laptop / Pi link is ${connectionState.toLowerCase()}`
+          : "WebSocket-supervised laptop / Pi link is offline",
     },
   };
 }

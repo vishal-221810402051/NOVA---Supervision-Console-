@@ -2,6 +2,7 @@ import type {
   ChipDeviceStatus,
   ChipStatusPayload,
   DeviceRegistryEntry,
+  GatewayHealthPayload,
   HealthState,
   NodeHealthPayload,
   PowerMeasurementStatus,
@@ -353,6 +354,28 @@ function formatPowerMeasurement(
     return "Invalid reading";
   }
   return "Not measured";
+}
+
+export function updateRegistryFromGatewayHealth(
+  registry: DeviceRegistry,
+  payload: GatewayHealthPayload,
+  timestamp_utc: string
+): DeviceRegistry {
+  const healthState = payload.health_state === "HEALTHY"
+    ? "HEALTHY"
+    : payload.health_state === "OFFLINE" || payload.health_state === "FAIL_SAFE"
+      ? payload.health_state
+      : "DEGRADED";
+
+  return {
+    ...registry,
+    [DEVICE_IDS.PI_GATEWAY]: updateEntry(registry[DEVICE_IDS.PI_GATEWAY], {
+      health_state: healthState,
+      online: healthState !== "OFFLINE",
+      last_seen_utc: timestamp_utc,
+      status_message: payload.status_message,
+    }),
+  };
 }
 
 export function updateRegistryFromNodeHealth(

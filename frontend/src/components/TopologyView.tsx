@@ -315,7 +315,7 @@ function GatewayHealthCard({
             Gateway Health
           </h2>
           <p className="text-xs uppercase tracking-widest text-slate-500">
-            Simulated Gateway Telemetry
+            Gateway Telemetry
           </p>
         </div>
         <StatusPill

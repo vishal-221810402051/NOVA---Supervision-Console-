@@ -15,6 +15,7 @@ import {
   getGlobalSystemHealth,
   getRegistrySummary,
   updateRegistryFromChipStatus,
+  updateRegistryFromGatewayHealth,
   updateRegistryFromNodeHealth,
   updateRegistryFromPowerHealth,
   updateRegistryFromSystemHealth,
@@ -25,6 +26,7 @@ import {
   getLinkRegistrySummary,
   updateLinkRegistryFromHeartbeat,
   updateLinkRegistryFromSync,
+  updateLinkRegistryFromWebSocket,
   type LinkRegistry,
 } from "../state/linkRegistry";
 import {
@@ -168,21 +170,34 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   setConnectionState: (state) => set({ connectionState: state }),
 
   setTelemetrySourceConnectionState: (sourceState) =>
-    set((state) => ({
-      connectionState: sourceState,
-      activeTelemetrySource: {
-        ...state.activeTelemetrySource,
-        connection_state: sourceState,
-        last_connected_utc:
-          sourceState === "CONNECTED"
-            ? new Date().toISOString()
-            : state.activeTelemetrySource.last_connected_utc,
-        last_error:
-          sourceState === "CONNECTED"
-            ? null
-            : state.activeTelemetrySource.last_error,
-      },
-    })),
+    set((state) => {
+      const shouldProjectWebSocketLink = !state.activeTelemetrySource.is_simulated;
+      const linkRegistry = shouldProjectWebSocketLink
+        ? updateLinkRegistryFromWebSocket(
+            state.linkRegistry,
+            sourceState,
+            new Date().toISOString()
+          )
+        : state.linkRegistry;
+
+      return {
+        connectionState: sourceState,
+        activeTelemetrySource: {
+          ...state.activeTelemetrySource,
+          connection_state: sourceState,
+          last_connected_utc:
+            sourceState === "CONNECTED"
+              ? new Date().toISOString()
+              : state.activeTelemetrySource.last_connected_utc,
+          last_error:
+            sourceState === "CONNECTED"
+              ? null
+              : state.activeTelemetrySource.last_error,
+        },
+        linkRegistry,
+        linkRegistrySummary: getLinkRegistrySummary(linkRegistry),
+      };
+    }),
 
   setTelemetrySourceError: (error) =>
     set((state) => ({
@@ -468,6 +483,14 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
 
       if (packet.event_type === "NODE_HEALTH_TELEMETRY") {
         deviceRegistry = updateRegistryFromNodeHealth(
+          deviceRegistry,
+          packet.payload,
+          packet.timestamp_utc
+        );
+      }
+
+      if (packet.event_type === "GATEWAY_HEALTH_TELEMETRY") {
+        deviceRegistry = updateRegistryFromGatewayHealth(
           deviceRegistry,
           packet.payload,
           packet.timestamp_utc

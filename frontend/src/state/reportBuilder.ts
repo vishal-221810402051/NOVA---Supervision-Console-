@@ -29,11 +29,11 @@ export type NovaScValidationReport = {
     report_schema_version: "v1.1";
     generated_at_utc: string;
     app_name: "NOVA SC";
-    nova_sc_phase: "PHASE_5_9";
+    nova_sc_phase: "PHASE_6_8_REAL_FULL_TOPOLOGY_VALIDATION";
     validation_engine_version: "V1_PLUS_TOPOLOGY_AWARE";
     simulator_mode: boolean;
     hardware_connected: boolean;
-    validation_scope: "SUPERVISORY_SIMULATION" | "PHASE_6_4C_HARDWARE_BRINGUP";
+    validation_scope: "SUPERVISORY_SIMULATION" | "PHASE_6_8_REAL_FULL_TOPOLOGY";
     physical_hardware_validation: boolean;
     active_stream_id: string | null;
     backend_stream_id: string | null;
@@ -44,8 +44,8 @@ export type NovaScValidationReport = {
   };
   project: {
     name: "NOVA SC";
-    phase: "PHASE_5_9";
-    scope: "REPLAY_REDUCER";
+    phase: "PHASE_6_8";
+    scope: "REAL_FULL_TOPOLOGY_VALIDATION";
   };
   system_status: {
     global_health: HealthState;
@@ -100,7 +100,7 @@ export type NovaScValidationReport = {
     desynced_links: string[];
   };
   link_registry_snapshot: LinkRegistry;
-  gateway_health: (GatewayHealthPayload & { telemetry_mode: "SIMULATED" }) | null;
+  gateway_health: (GatewayHealthPayload & { telemetry_mode: "SIMULATED" | "HARDWARE" }) | null;
   stream_metadata: {
     active_stream_id: string | null;
     stream_switches: number;
@@ -144,6 +144,7 @@ export type NovaScValidationReport = {
   chip_status_summary: Record<string, unknown>;
   power_health_summary: Record<string, unknown>;
   expected_warnings: HealthCheckRule[];
+  known_limitations: string[];
   device_registry: DeviceRegistry;
   recent_logs: EngineeringLog[];
   engineering_logs_recent: EngineeringLog[];
@@ -245,13 +246,13 @@ export function buildNovaScValidationReport(params: {
       report_schema_version: "v1.1",
       generated_at_utc: generatedAtUtc,
       app_name: "NOVA SC",
-      nova_sc_phase: "PHASE_5_9",
+      nova_sc_phase: "PHASE_6_8_REAL_FULL_TOPOLOGY_VALIDATION",
       validation_engine_version: "V1_PLUS_TOPOLOGY_AWARE",
       simulator_mode: params.activeTelemetrySource.is_simulated,
       hardware_connected: !params.activeTelemetrySource.is_simulated,
       validation_scope: params.activeTelemetrySource.is_simulated
         ? "SUPERVISORY_SIMULATION"
-        : "PHASE_6_4C_HARDWARE_BRINGUP",
+        : "PHASE_6_8_REAL_FULL_TOPOLOGY",
       physical_hardware_validation: !params.activeTelemetrySource.is_simulated,
       active_stream_id: params.activeStreamId,
       backend_stream_id: params.activeStreamId,
@@ -262,8 +263,8 @@ export function buildNovaScValidationReport(params: {
     },
     project: {
       name: "NOVA SC",
-      phase: "PHASE_5_9",
-      scope: "REPLAY_REDUCER",
+      phase: "PHASE_6_8",
+      scope: "REAL_FULL_TOPOLOGY_VALIDATION",
     },
     system_status: {
       global_health: params.globalHealth,
@@ -317,8 +318,8 @@ export function buildNovaScValidationReport(params: {
     link_registry_snapshot: params.linkRegistry,
     gateway_health: params.gatewayHealth
       ? {
-          telemetry_mode: "SIMULATED",
           ...params.gatewayHealth,
+          telemetry_mode: params.activeTelemetrySource.is_simulated ? "SIMULATED" : "HARDWARE",
         }
       : null,
     stream_metadata: {
@@ -367,10 +368,24 @@ export function buildNovaScValidationReport(params: {
       (rule) =>
         rule.category === "EXPECTED_WARNING" || rule.rule_id.includes("FRAM")
     ),
+    known_limitations: buildKnownLimitations(),
     device_registry: params.deviceRegistry,
     recent_logs: params.logs.slice(0, 50),
     engineering_logs_recent: params.logs.slice(0, 50),
   };
+}
+
+function buildKnownLimitations() {
+  return [
+    "PCA9685_ALLCALL is NOT_VALIDATED because it is not an independent physical device validation.",
+    "MB85RS256B_FRAM is BLOCKED_WRONG_IC_PENDING.",
+    "POWER_HEALTH is ADC_NOT_CONFIGURED.",
+    "MAIN_TO_SUB_UART is disabled.",
+    "No command path exists.",
+    "No actuator power/control has been validated.",
+    "No PCA9685 PWM output has been enabled.",
+    "No motor/servo/stepper/pump/valve/relay/heater validation has been performed.",
+  ];
 }
 
 function buildNodeSummary(params: {

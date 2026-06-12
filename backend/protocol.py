@@ -106,6 +106,17 @@ def build_gateway_health_packet(state: GatewayState) -> dict[str, Any]:
             "buffer_depth": 0,
             "dropped_packets": health_status["dropped_packet_count"],
             "status_message": f"Pi gateway bridge status: {health_status['bridge_status']}",
+            "backend_mode": health_status["backend_mode"],
+            "bridge_status": health_status["bridge_status"],
+            "serial_port": health_status["serial_port"],
+            "baud": health_status["baud"],
+            "serial_connected": health_status["serial_connected"],
+            "hardware_connected": health_status["hardware_connected"],
+            "malformed_packet_count": health_status["malformed_packet_count"],
+            "last_esp32_main_packet_utc": health_status["last_esp32_main_packet_utc"],
+            "last_esp32_sub_packet_utc": health_status["last_esp32_sub_packet_utc"],
+            "stream_id": health_status["stream_id"],
+            "mode": health_status["backend_mode"],
         },
     }
 
