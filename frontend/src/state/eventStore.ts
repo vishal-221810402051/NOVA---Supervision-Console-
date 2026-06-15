@@ -62,7 +62,7 @@ export type TelemetryEventInput = Omit<
   "event_id" | "event_store_sequence" | "event_timestamp_utc"
 >;
 
-export const DEFAULT_EVENT_STORE_MAX_EVENTS = 5000;
+export const DEFAULT_EVENT_STORE_MAX_EVENTS = 10000;
 
 const EMPTY_DISPOSITION_COUNTS: Record<TelemetryEventDisposition, number> = {
   ACCEPTED: 0,

@@ -72,11 +72,21 @@ class HardwareStreamManager:
         next_gateway_health_at = 0.0
 
         while self._running:
+            try:
+                packet = self.source_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                packet = None
+
+            if packet is not None:
+                await self._broadcast(packet)
+                continue
+
             loop_time = asyncio.get_running_loop().time()
 
             if loop_time >= next_gateway_health_at:
                 await self._broadcast(self.gateway_health_builder(self.gateway_state))
                 next_gateway_health_at = loop_time + self.gateway_interval_seconds
+                continue
 
             try:
                 timeout = max(0.0, min(0.1, next_gateway_health_at - loop_time))

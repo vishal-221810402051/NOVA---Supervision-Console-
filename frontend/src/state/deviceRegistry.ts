@@ -468,7 +468,9 @@ export function ageDeviceRegistry(
     let online = device.online;
     let statusMessage = device.status_message;
 
-    if (device.device_id === DEVICE_IDS.FRAM) {
+    const freshnessPolicy = getDeviceFreshnessPolicy(device);
+
+    if (!freshnessPolicy.freshnessDowngradeEnabled) {
       next[id] = {
         ...device,
         heartbeat_age_ms: heartbeatAgeMs,
@@ -476,14 +478,14 @@ export function ageDeviceRegistry(
       continue;
     }
 
-    if (heartbeatAgeMs > 6000) {
+    if (heartbeatAgeMs > freshnessPolicy.offlineAfterMs) {
       healthState = "OFFLINE";
       online = false;
-      statusMessage = `Telemetry timeout > 6000 ms`;
-    } else if (heartbeatAgeMs > 3000) {
+      statusMessage = `Telemetry timeout > ${freshnessPolicy.offlineAfterMs} ms`;
+    } else if (heartbeatAgeMs > freshnessPolicy.degradedAfterMs) {
       healthState = "DEGRADED";
       online = true;
-      statusMessage = `Telemetry stale > 3000 ms`;
+      statusMessage = `Telemetry stale > ${freshnessPolicy.degradedAfterMs} ms`;
     }
 
     next[id] = {
@@ -496,6 +498,69 @@ export function ageDeviceRegistry(
   }
 
   return next;
+}
+
+function getDeviceFreshnessPolicy(device: DeviceRegistryEntry): {
+  degradedAfterMs: number;
+  offlineAfterMs: number;
+  freshnessDowngradeEnabled: boolean;
+} {
+  if (isStaticExpectedWarningDevice(device)) {
+    return {
+      degradedAfterMs: Number.POSITIVE_INFINITY,
+      offlineAfterMs: Number.POSITIVE_INFINITY,
+      freshnessDowngradeEnabled: false,
+    };
+  }
+
+  if (device.kind === "POWER_RAIL") {
+    return {
+      degradedAfterMs: 6000,
+      offlineAfterMs: 12000,
+      freshnessDowngradeEnabled: true,
+    };
+  }
+
+  if (device.kind === "I2C_DEVICE" || device.kind === "SPI_DEVICE") {
+    return {
+      degradedAfterMs: 12000,
+      offlineAfterMs: 20000,
+      freshnessDowngradeEnabled: true,
+    };
+  }
+
+  return {
+    degradedAfterMs: 5000,
+    offlineAfterMs: 10000,
+    freshnessDowngradeEnabled: true,
+  };
+}
+
+function isStaticExpectedWarningDevice(device: DeviceRegistryEntry): boolean {
+  if (
+    device.device_id === DEVICE_IDS.FRAM &&
+    device.status_message.includes("BLOCKED_WRONG_IC_PENDING")
+  ) {
+    return true;
+  }
+
+  if (
+    device.device_id === DEVICE_IDS.PCA9685_ALLCALL &&
+    device.status_message.includes("Not validated")
+  ) {
+    return true;
+  }
+
+  if (
+    (device.device_id === DEVICE_IDS.VIN_PROTECTED ||
+      device.device_id === DEVICE_IDS.RAIL_5V ||
+      device.device_id === DEVICE_IDS.RAIL_3V3) &&
+    device.status_message.includes("ADC_NOT_CONFIGURED")
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 export function getGlobalSystemHealth(registry: DeviceRegistry): HealthState {

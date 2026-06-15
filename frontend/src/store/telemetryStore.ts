@@ -1307,7 +1307,7 @@ function deriveSoakVerdict(
     warningReasons.push("Transient link dropout recovered");
   }
   if (context.eventStoreDroppedOldEvents > 0) {
-    warningReasons.push("Event store dropped old events; soak replay may be partial");
+    warningReasons.push("Raw event replay partial; live soak summary counters preserved");
   }
 
   if (failureReasons.length > 0) {

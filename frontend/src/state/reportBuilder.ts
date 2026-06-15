@@ -133,6 +133,12 @@ export type NovaScValidationReport = {
     target_duration_minutes: number | null;
     is_soak_active: boolean;
     last_updated_at_utc: string | null;
+    live_soak_summary_complete: boolean;
+    raw_event_replay_complete: boolean;
+    raw_event_store_capacity: number;
+    raw_event_store_current_events: number;
+    raw_event_store_dropped_old_events: number;
+    replay_limitation_reason: string | null;
     verdict: string;
     failure_reasons: string[];
     warning_reasons: string[];
@@ -376,7 +382,7 @@ export function buildNovaScValidationReport(params: {
       unknown_node_packets: params.unknownNodePackets,
       unknown_link_packets: params.unknownLinkPackets,
     },
-    soak_test_summary: buildSoakTestSummary(params.soakMetrics),
+    soak_test_summary: buildSoakTestSummary(params.soakMetrics, params.eventStoreSummary),
     event_store_summary: params.eventStoreSummary,
     event_store_recent: params.eventStoreRecent,
     replay_snapshot: replaySnapshot,
@@ -419,13 +425,29 @@ function buildKnownLimitations() {
   ];
 }
 
-function buildSoakTestSummary(soakMetrics: SoakMetrics): NovaScValidationReport["soak_test_summary"] {
+function buildSoakTestSummary(
+  soakMetrics: SoakMetrics,
+  eventStoreSummary: EventStoreSummary
+): NovaScValidationReport["soak_test_summary"] {
+  const liveSoakSummaryComplete =
+    soakMetrics.targetDurationMinutes !== null &&
+    soakMetrics.soakElapsedSeconds >= soakMetrics.targetDurationMinutes * 60;
+  const rawEventReplayComplete = eventStoreSummary.dropped_old_events === 0;
+
   return {
     soak_started_at_utc: soakMetrics.soakStartedAtUtc,
     soak_elapsed_seconds: soakMetrics.soakElapsedSeconds,
     target_duration_minutes: soakMetrics.targetDurationMinutes,
     is_soak_active: soakMetrics.isSoakActive,
     last_updated_at_utc: soakMetrics.lastUpdatedAtUtc,
+    live_soak_summary_complete: liveSoakSummaryComplete,
+    raw_event_replay_complete: rawEventReplayComplete,
+    raw_event_store_capacity: eventStoreSummary.max_events,
+    raw_event_store_current_events: eventStoreSummary.current_events,
+    raw_event_store_dropped_old_events: eventStoreSummary.dropped_old_events,
+    replay_limitation_reason: rawEventReplayComplete
+      ? null
+      : "Raw event replay is partial because older bounded event records were dropped; live soak summary counters are preserved.",
     verdict: soakMetrics.verdict.status,
     failure_reasons: soakMetrics.verdict.failureReasons,
     warning_reasons: soakMetrics.verdict.warningReasons,
