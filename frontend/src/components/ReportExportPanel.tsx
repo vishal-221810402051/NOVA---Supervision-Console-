@@ -33,6 +33,7 @@ export function ReportExportPanel() {
   const eventStoreSummary = useTelemetryStore((s) => s.eventStoreSummary);
   const eventStoreDroppedOldEvents = useTelemetryStore((s) => s.eventStoreDroppedOldEvents);
   const eventStoreMaxEvents = useTelemetryStore((s) => s.eventStoreMaxEvents);
+  const soakMetrics = useTelemetryStore((s) => s.soakMetrics);
   const lastPacketAt = useTelemetryStore((s) => s.lastPacketAt);
   const logs = useTelemetryStore((s) => s.logs);
 
@@ -69,6 +70,7 @@ export function ReportExportPanel() {
       eventStore,
       eventStoreDroppedOldEvents,
       eventStoreMaxEvents,
+      soakMetrics,
       lastPacketAt,
       logs,
     });
@@ -103,9 +105,11 @@ export function ReportExportPanel() {
         <Metric label="Includes Logs" value="Last 50 Events" />
         <Metric label="Includes Event Store" value="Last 50 Event Records" />
         <Metric label="Replay Reconstruction" value="Included" />
-        <Metric label="Simulator Mode" value="TRUE" />
-        <Metric label="Hardware Connected" value="FALSE" />
-        <Metric label="Physical Hardware Validation" value="FALSE" />
+        <Metric label="Soak Summary" value="Included" />
+        <Metric label="Soak Verdict" value={soakMetrics.verdict.status} />
+        <Metric label="Simulator Mode" value={activeTelemetrySource.is_simulated ? "TRUE" : "FALSE"} />
+        <Metric label="Hardware Connected" value={activeTelemetrySource.is_simulated ? "FALSE" : "TRUE"} />
+        <Metric label="Physical Hardware Validation" value={activeTelemetrySource.is_simulated ? "FALSE" : "TRUE"} />
       </div>
     </section>
   );

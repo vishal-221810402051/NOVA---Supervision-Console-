@@ -10,6 +10,7 @@ import type {
   HealthState,
 } from "../types/telemetry";
 import type { TelemetrySourceStatus } from "../transport/telemetrySource";
+import type { SoakMetrics } from "../store/telemetryStore";
 import type {
   EventStoreSummary,
   TelemetryEventRecord,
@@ -126,6 +127,31 @@ export type NovaScValidationReport = {
     unknown_node_packets: number;
     unknown_link_packets: number;
   };
+  soak_test_summary: {
+    soak_started_at_utc: string | null;
+    soak_elapsed_seconds: number;
+    target_duration_minutes: number | null;
+    is_soak_active: boolean;
+    last_updated_at_utc: string | null;
+    verdict: string;
+    failure_reasons: string[];
+    warning_reasons: string[];
+    total_packets: number;
+    packets_per_minute: number;
+    packets_by_source_node: Record<string, number>;
+    packets_by_event_type: Record<string, number>;
+    packets_by_link: Record<string, number>;
+    max_heartbeat_gap_ms_by_link: Record<string, number>;
+    link_dropout_count_by_link: Record<string, number>;
+    link_recovered_dropout_count_by_link: Record<string, number>;
+    node_health_transitions: Record<string, {
+      health_transition_count: number;
+      health_transitions: Record<string, number>;
+      reset_count: number;
+      last_uptime_ms: number | null;
+      reset_reason: string | null;
+    }>;
+  };
   event_store_summary: EventStoreSummary;
   event_store_recent: TelemetryEventRecord[];
   replay_snapshot: ReplaySnapshot;
@@ -191,6 +217,7 @@ export function buildNovaScValidationReport(params: {
   eventStore: TelemetryEventRecord[];
   eventStoreDroppedOldEvents: number;
   eventStoreMaxEvents: number;
+  soakMetrics: SoakMetrics;
   lastPacketAt: string | null;
   logs: EngineeringLog[];
 }): NovaScValidationReport {
@@ -349,6 +376,7 @@ export function buildNovaScValidationReport(params: {
       unknown_node_packets: params.unknownNodePackets,
       unknown_link_packets: params.unknownLinkPackets,
     },
+    soak_test_summary: buildSoakTestSummary(params.soakMetrics),
     event_store_summary: params.eventStoreSummary,
     event_store_recent: params.eventStoreRecent,
     replay_snapshot: replaySnapshot,
@@ -389,6 +417,54 @@ function buildKnownLimitations() {
     "No watchdog/fail-safe validation has been performed yet.",
     "Long-runtime telemetry soak validation is still pending.",
   ];
+}
+
+function buildSoakTestSummary(soakMetrics: SoakMetrics): NovaScValidationReport["soak_test_summary"] {
+  return {
+    soak_started_at_utc: soakMetrics.soakStartedAtUtc,
+    soak_elapsed_seconds: soakMetrics.soakElapsedSeconds,
+    target_duration_minutes: soakMetrics.targetDurationMinutes,
+    is_soak_active: soakMetrics.isSoakActive,
+    last_updated_at_utc: soakMetrics.lastUpdatedAtUtc,
+    verdict: soakMetrics.verdict.status,
+    failure_reasons: soakMetrics.verdict.failureReasons,
+    warning_reasons: soakMetrics.verdict.warningReasons,
+    total_packets: soakMetrics.totalPackets,
+    packets_per_minute: soakMetrics.packetsPerMinute,
+    packets_by_source_node: soakMetrics.packetsBySourceNode,
+    packets_by_event_type: soakMetrics.packetsByEventType,
+    packets_by_link: soakMetrics.packetsByLink,
+    max_heartbeat_gap_ms_by_link: Object.fromEntries(
+      Object.entries(soakMetrics.linkStability).map(([linkId, link]) => [
+        linkId,
+        link.maxHeartbeatGapMs,
+      ])
+    ),
+    link_dropout_count_by_link: Object.fromEntries(
+      Object.entries(soakMetrics.linkStability).map(([linkId, link]) => [
+        linkId,
+        link.dropoutCount,
+      ])
+    ),
+    link_recovered_dropout_count_by_link: Object.fromEntries(
+      Object.entries(soakMetrics.linkStability).map(([linkId, link]) => [
+        linkId,
+        link.recoveredDropoutCount,
+      ])
+    ),
+    node_health_transitions: Object.fromEntries(
+      Object.entries(soakMetrics.nodeStability).map(([nodeId, node]) => [
+        nodeId,
+        {
+          health_transition_count: node.healthTransitionCount,
+          health_transitions: node.healthTransitions,
+          reset_count: node.resetCount,
+          last_uptime_ms: node.lastUptimeMs,
+          reset_reason: node.resetReason,
+        },
+      ])
+    ),
+  };
 }
 
 function buildDisabledFeatures() {
