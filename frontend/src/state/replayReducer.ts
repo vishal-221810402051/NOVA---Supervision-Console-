@@ -11,6 +11,7 @@ import {
   getGlobalSystemHealth,
   getRegistrySummary,
   updateRegistryFromChipStatus,
+  updateRegistryFromGatewayHealth,
   updateRegistryFromNodeHealth,
   updateRegistryFromPowerHealth,
   updateRegistryFromSystemHealth,
@@ -21,6 +22,7 @@ import {
   getLinkRegistrySummary,
   updateLinkRegistryFromHeartbeat,
   updateLinkRegistryFromSync,
+  updateLinkRegistryFromWebSocketActivity,
   type LinkRegistry,
 } from "./linkRegistry";
 import { evaluateV1PlusHealthCheck } from "./healthCheckEngine";
@@ -196,6 +198,13 @@ export function buildReplaySnapshot(params: {
   const connectionState: ConnectionState =
     state.packetCount > 0 ? "CONNECTED" : "OFFLINE";
   const isTelemetryStale = state.packetCount === 0;
+  if (connectionState === "CONNECTED") {
+    state.linkRegistry = updateLinkRegistryFromWebSocketActivity(
+      state.linkRegistry,
+      replayClockUtc,
+      "Replay-derived WebSocket transport activity"
+    );
+  }
   const deviceRegistry = state.deviceRegistry;
   const linkRegistry = state.linkRegistry;
   const validation = evaluateV1PlusHealthCheck(
@@ -392,6 +401,11 @@ function applyAcceptedPacketToReplayState(
 
   if (replayPacket.event_type === "GATEWAY_HEALTH_TELEMETRY") {
     state.gatewayHealth = replayPacket.payload;
+    state.deviceRegistry = updateRegistryFromGatewayHealth(
+      state.deviceRegistry,
+      replayPacket.payload,
+      replayPacket.timestamp_utc
+    );
   }
 
   if (replayPacket.event_type === "LINK_HEARTBEAT_TELEMETRY") {

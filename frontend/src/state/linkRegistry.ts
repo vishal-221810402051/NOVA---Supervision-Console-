@@ -142,6 +142,28 @@ export function updateLinkRegistryFromWebSocket(
   };
 }
 
+export function updateLinkRegistryFromWebSocketActivity(
+  registry: LinkRegistry,
+  observedAtUtc: string,
+  statusMessage = "WebSocket telemetry stream is active"
+): LinkRegistry {
+  const current = registry[LINK_IDS.LAPTOP_PI];
+  if (!current) return registry;
+
+  return {
+    ...registry,
+    [LINK_IDS.LAPTOP_PI]: {
+      ...current,
+      link_state: "LINK_HEALTHY",
+      sync_state: "SYNCED",
+      last_heartbeat_utc: observedAtUtc,
+      heartbeat_age_ms: 0,
+      missed_heartbeat_count: 0,
+      status_message: statusMessage,
+    },
+  };
+}
+
 export function getLinkRegistrySummary(registry: LinkRegistry) {
   const links = Object.values(registry);
 

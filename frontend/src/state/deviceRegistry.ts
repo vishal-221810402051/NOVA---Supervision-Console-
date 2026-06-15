@@ -570,12 +570,9 @@ export function getGlobalSystemHealth(registry: DeviceRegistry): HealthState {
   if (hasFailSafe) return "FAIL_SAFE";
 
   const criticalIds = [
+    DEVICE_IDS.PI_GATEWAY,
     DEVICE_IDS.MAIN_MCU,
     DEVICE_IDS.SUB_MCU,
-    DEVICE_IDS.WIFI_LINK,
-    DEVICE_IDS.MAIN_SUB_UART,
-    DEVICE_IDS.RAIL_5V,
-    DEVICE_IDS.RAIL_3V3,
   ];
 
   const criticalDevices = criticalIds.map((id) => registry[id]);

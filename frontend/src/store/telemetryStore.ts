@@ -26,6 +26,7 @@ import {
   getLinkRegistrySummary,
   updateLinkRegistryFromHeartbeat,
   updateLinkRegistryFromSync,
+  updateLinkRegistryFromWebSocketActivity,
   updateLinkRegistryFromWebSocket,
   type LinkRegistry,
 } from "../state/linkRegistry";
@@ -701,6 +702,16 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         linkRegistry = updateLinkRegistryFromSync(
           linkRegistry,
           packet.payload
+        );
+      }
+
+      if (
+        state.connectionState === "CONNECTED" &&
+        !state.activeTelemetrySource.is_simulated
+      ) {
+        linkRegistry = updateLinkRegistryFromWebSocketActivity(
+          linkRegistry,
+          new Date(now).toISOString()
         );
       }
 

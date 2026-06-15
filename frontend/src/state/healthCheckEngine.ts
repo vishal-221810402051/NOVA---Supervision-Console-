@@ -133,6 +133,7 @@ export function evaluateV1PlusHealthCheck(params: {
     ...linkRules(
       params.linkRegistry,
       params.connectionState,
+      params.isTelemetryStale,
       params.hardwareBringupMode === true,
       options.nowMs
     ),
@@ -379,13 +380,20 @@ function gatewayRules(
 function linkRules(
   linkRegistry: LinkRegistry,
   connectionState: ConnectionState,
+  isTelemetryStale: boolean,
   _hardwareBringupMode: boolean,
   nowMs?: number
 ): HealthCheckRule[] {
   return [
-    ...rulesForLink("LAPTOP_PI", linkRegistry[LINK_IDS.LAPTOP_PI], connectionState, nowMs),
-    ...rulesForLink("PI_MAIN", linkRegistry[LINK_IDS.PI_MAIN], connectionState, nowMs),
-    ...rulesForLink("MAIN_SUB", linkRegistry[LINK_IDS.MAIN_SUB], connectionState, nowMs),
+    ...rulesForLink(
+      "LAPTOP_PI",
+      linkRegistry[LINK_IDS.LAPTOP_PI],
+      connectionState,
+      isTelemetryStale,
+      nowMs
+    ),
+    ...rulesForLink("PI_MAIN", linkRegistry[LINK_IDS.PI_MAIN], connectionState, false, nowMs),
+    ...rulesForLink("MAIN_SUB", linkRegistry[LINK_IDS.MAIN_SUB], connectionState, false, nowMs),
   ];
 }
 
@@ -393,6 +401,7 @@ function rulesForLink(
   id: string,
   link: LinkRegistryEntry | undefined,
   connectionState: ConnectionState,
+  isTelemetryStale: boolean,
   nowMs?: number
 ): HealthCheckRule[] {
   if (!link) {
@@ -412,7 +421,20 @@ function rulesForLink(
   const health = linkStateResult(link.link_state);
   const sync = syncStateResult(link.sync_state);
   const heartbeatAge = getHeartbeatAgeMs(link, nowMs);
-  const freshness = heartbeatFreshnessResult(heartbeatAge, connectionState);
+  const freshness =
+    link.link_id === LINK_IDS.LAPTOP_PI
+      ? webSocketLinkFreshnessResult(heartbeatAge, connectionState, isTelemetryStale)
+      : heartbeatFreshnessResult(heartbeatAge, connectionState);
+  const freshnessDetails =
+    link.link_id === LINK_IDS.LAPTOP_PI &&
+    connectionState === "CONNECTED" &&
+    !isTelemetryStale
+      ? heartbeatAge === null
+        ? "WebSocket telemetry stream is live"
+        : `WebSocket telemetry activity age is ${Math.round(heartbeatAge)} ms`
+      : heartbeatAge === null
+        ? "No heartbeat timestamp is available"
+        : `Heartbeat age is ${Math.round(heartbeatAge)} ms`;
 
   return [
     rule({
@@ -439,10 +461,7 @@ function rulesForLink(
       category: "LINK",
       result: freshness.result,
       severity: freshness.severity,
-      details:
-        heartbeatAge === null
-          ? "No heartbeat timestamp is available"
-          : `Heartbeat age is ${Math.round(heartbeatAge)} ms`,
+      details: freshnessDetails,
       evidence: {
         source: `${link.link_id}.last_heartbeat_utc`,
         timestamp_utc: link.last_heartbeat_utc,
@@ -997,6 +1016,30 @@ function heartbeatFreshnessResult(
 
   if (ageMs > 6000) return { result: "FAIL", severity: "CRITICAL" };
   if (ageMs > 3000) return { result: "WARNING", severity: "WARNING" };
+  return { result: "PASS", severity: "INFO" };
+}
+
+function webSocketLinkFreshnessResult(
+  ageMs: number | null,
+  connectionState: ConnectionState,
+  isTelemetryStale: boolean
+): {
+  result: HealthCheckResult;
+  severity: HealthCheckSeverity;
+} {
+  if (connectionState !== "CONNECTED") {
+    return { result: "FAIL", severity: "CRITICAL" };
+  }
+
+  if (isTelemetryStale) {
+    return { result: "FAIL", severity: "CRITICAL" };
+  }
+
+  if (ageMs === null) {
+    return { result: "PASS", severity: "INFO" };
+  }
+
+  if (ageMs > 6000) return { result: "WARNING", severity: "WARNING" };
   return { result: "PASS", severity: "INFO" };
 }
 
