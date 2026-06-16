@@ -50,6 +50,9 @@ const POWER_STATES: PowerState[] = [
 const POWER_MEASUREMENT_STATUSES: PowerMeasurementStatus[] = [
   "MEASURED",
   "ADC_NOT_CONFIGURED",
+  "ADC_RAW_DEBUG",
+  "ADC_NOT_DETECTED",
+  "ADC_READ_ERROR",
   "SENSOR_UNAVAILABLE",
   "INVALID_READING",
 ];
@@ -444,7 +447,23 @@ function validatePowerHealth(payload: PacketRecord, raw: unknown): PacketValidat
   }
   if (typeof payload.brownout_detected !== "boolean") return invalidPayload("brownout_detected must be boolean", raw);
   if (!isPowerState(payload.power_state)) return invalidPayload("Invalid power_state", raw);
+  if (
+    payload.ads1115_channels !== undefined &&
+    !validateAds1115RawChannels(payload.ads1115_channels)
+  ) {
+    return invalidPayload("Invalid ads1115_channels", raw);
+  }
   return ok(raw);
+}
+
+function validateAds1115RawChannels(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    validateRawAdcVoltage(value.ain0_v) &&
+    validateRawAdcVoltage(value.ain1_v) &&
+    validateRawAdcVoltage(value.ain2_v) &&
+    validateRawAdcVoltage(value.ain3_v)
+  );
 }
 
 function validateTelemetryIntegrityEvent(payload: PacketRecord, raw: unknown): PacketValidationResult {
@@ -592,6 +611,10 @@ function validatePowerVoltage(
 ): "number" | "null" | "invalid" {
   if (value === null) return "null";
   return isNumberInRange(value, min, max) ? "number" : "invalid";
+}
+
+function validateRawAdcVoltage(value: unknown): boolean {
+  return value === null || isNumberInRange(value, 0, 4.096);
 }
 
 function isLinkState(value: unknown): value is LinkState {

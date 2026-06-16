@@ -347,6 +347,15 @@ function formatPowerMeasurement(
   if (measurementStatus === "ADC_NOT_CONFIGURED") {
     return "Not measured: ADC_NOT_CONFIGURED";
   }
+  if (measurementStatus === "ADC_RAW_DEBUG") {
+    return "Raw ADC debug only: rail mapping not configured";
+  }
+  if (measurementStatus === "ADC_NOT_DETECTED") {
+    return "Not measured: ADC_NOT_DETECTED";
+  }
+  if (measurementStatus === "ADC_READ_ERROR") {
+    return "Not measured: ADC_READ_ERROR";
+  }
   if (measurementStatus === "SENSOR_UNAVAILABLE") {
     return "Unavailable";
   }
@@ -555,7 +564,10 @@ function isStaticExpectedWarningDevice(device: DeviceRegistryEntry): boolean {
     (device.device_id === DEVICE_IDS.VIN_PROTECTED ||
       device.device_id === DEVICE_IDS.RAIL_5V ||
       device.device_id === DEVICE_IDS.RAIL_3V3) &&
-    device.status_message.includes("ADC_NOT_CONFIGURED")
+    (device.status_message.includes("ADC_NOT_CONFIGURED") ||
+      device.status_message.includes("Raw ADC debug only") ||
+      device.status_message.includes("ADC_NOT_DETECTED") ||
+      device.status_message.includes("ADC_READ_ERROR"))
   ) {
     return true;
   }

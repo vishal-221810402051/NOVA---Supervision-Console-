@@ -3,6 +3,9 @@ export type HealthState = "HEALTHY" | "DEGRADED" | "OFFLINE" | "FAIL_SAFE";
 export type PowerMeasurementStatus =
   | "MEASURED"
   | "ADC_NOT_CONFIGURED"
+  | "ADC_RAW_DEBUG"
+  | "ADC_NOT_DETECTED"
+  | "ADC_READ_ERROR"
   | "SENSOR_UNAVAILABLE"
   | "INVALID_READING";
 
@@ -159,6 +162,15 @@ export type PowerHealthPayload = {
   brownout_detected: boolean;
   power_state: PowerState;
   measurement_status?: PowerMeasurementStatus;
+  adc_source?: string;
+  adc_address?: string;
+  adc_mode?: string;
+  ads1115_channels?: {
+    ain0_v: number | null;
+    ain1_v: number | null;
+    ain2_v: number | null;
+    ain3_v: number | null;
+  };
 };
 
 export type GatewayHealthPayload = {

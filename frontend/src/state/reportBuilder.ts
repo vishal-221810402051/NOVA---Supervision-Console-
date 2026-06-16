@@ -8,6 +8,7 @@ import type {
   HealthCheckResult,
   HealthCheckRule,
   HealthState,
+  PowerHealthPayload,
 } from "../types/telemetry";
 import type { TelemetrySourceStatus } from "../transport/telemetrySource";
 import type { SoakMetrics } from "../store/telemetryStore";
@@ -198,6 +199,7 @@ export function buildNovaScValidationReport(params: {
     unknown: number;
   };
   gatewayHealth: GatewayHealthPayload | null;
+  powerHealth: PowerHealthPayload | null;
   activeTelemetrySource: TelemetrySourceStatus;
   globalHealth: HealthState;
   connectionState: ConnectionState;
@@ -400,7 +402,10 @@ export function buildNovaScValidationReport(params: {
       reconnect_attempts: params.activeTelemetrySource.reconnect_attempts,
     },
     chip_status_summary: buildChipStatusSummary(params.deviceRegistry),
-    power_health_summary: buildPowerHealthSummary(params.deviceRegistry),
+    power_health_summary: buildPowerHealthSummary(
+      params.deviceRegistry,
+      params.powerHealth
+    ),
     expected_warnings: healthCheck.rules.filter(
       (rule) =>
         rule.category === "EXPECTED_WARNING" || rule.rule_id.includes("FRAM")
@@ -416,7 +421,7 @@ export function buildNovaScValidationReport(params: {
 function buildKnownLimitations() {
   return [
     "Laptop node heartbeat is not implemented.",
-    "Power rail ADC measurement is not implemented; POWER_HEALTH uses ADC_NOT_CONFIGURED.",
+    "Power rail calibrated ADC measurement is not implemented; Phase 7.1A may expose raw ADS1115 input debug voltage only.",
     "MB85RS256B_FRAM is BLOCKED_WRONG_IC_PENDING.",
     "PCA9685_ALLCALL is NOT_VALIDATED because it is not an independent physical device validation.",
     "No safety interlock telemetry exists yet.",
@@ -566,11 +571,27 @@ function buildChipStatusSummary(registry: DeviceRegistry) {
   };
 }
 
-function buildPowerHealthSummary(registry: DeviceRegistry) {
+function buildPowerHealthSummary(
+  registry: DeviceRegistry,
+  powerHealth: PowerHealthPayload | null
+) {
   return {
     vin_protected: registry[DEVICE_IDS.VIN_PROTECTED],
     rail_5v_logic: registry[DEVICE_IDS.RAIL_5V],
     rail_3v3_logic: registry[DEVICE_IDS.RAIL_3V3],
+    adc_raw_debug: powerHealth
+      ? {
+          measurement_status: powerHealth.measurement_status ?? null,
+          adc_source: powerHealth.adc_source ?? null,
+          adc_address: powerHealth.adc_address ?? null,
+          adc_mode: powerHealth.adc_mode ?? null,
+          ain0_v: powerHealth.ads1115_channels?.ain0_v ?? null,
+          ain1_v: powerHealth.ads1115_channels?.ain1_v ?? null,
+          ain2_v: powerHealth.ads1115_channels?.ain2_v ?? null,
+          ain3_v: powerHealth.ads1115_channels?.ain3_v ?? null,
+          note: "Raw ADS1115 input voltage only; not calibrated rail voltage",
+        }
+      : null,
   };
 }
 

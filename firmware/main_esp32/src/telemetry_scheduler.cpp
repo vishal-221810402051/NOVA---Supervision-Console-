@@ -2,6 +2,7 @@
 
 #include <Wire.h>
 
+#include "ads1115_raw_reader.h"
 #include "board_config.h"
 #include "safe_bus_probe.h"
 
@@ -121,13 +122,42 @@ void TelemetryScheduler::emitPowerHealth() {
   JsonDocument doc;
   packetBuilder_.beginPacket(doc, "POWER_HEALTH");
   JsonObject payload = doc["payload"].as<JsonObject>();
+  Ads1115RawChannels channels;
+  const bool hasRawAdc = readAds1115RawChannels(channels);
+  const bool adcDetected = hasRawAdc || probeI2cAddressStable(ADS1115_ADDRESS, 1);
 
   payload["vin_protected_v"] = nullptr;
   payload["rail_5v_v"] = nullptr;
   payload["rail_3v3_v"] = nullptr;
   payload["brownout_detected"] = false;
   payload["power_state"] = "UNKNOWN";
-  payload["measurement_status"] = "ADC_NOT_CONFIGURED";
+  payload["measurement_status"] =
+      hasRawAdc ? "ADC_RAW_DEBUG" : (adcDetected ? "ADC_READ_ERROR" : "ADC_NOT_DETECTED");
+  payload["adc_source"] = "ADS1115";
+  payload["adc_address"] = "0x48";
+  payload["adc_mode"] = "RAW_SINGLE_ENDED_DEBUG";
+
+  JsonObject rawChannels = payload["ads1115_channels"].to<JsonObject>();
+  if (channels.ain0_ok) {
+    rawChannels["ain0_v"] = channels.ain0_v;
+  } else {
+    rawChannels["ain0_v"] = nullptr;
+  }
+  if (channels.ain1_ok) {
+    rawChannels["ain1_v"] = channels.ain1_v;
+  } else {
+    rawChannels["ain1_v"] = nullptr;
+  }
+  if (channels.ain2_ok) {
+    rawChannels["ain2_v"] = channels.ain2_v;
+  } else {
+    rawChannels["ain2_v"] = nullptr;
+  }
+  if (channels.ain3_ok) {
+    rawChannels["ain3_v"] = channels.ain3_v;
+  } else {
+    rawChannels["ain3_v"] = nullptr;
+  }
 
   packetBuilder_.emitPacket(doc, telemetryPort_);
 }
