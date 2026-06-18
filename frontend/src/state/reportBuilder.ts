@@ -9,6 +9,7 @@ import type {
   HealthCheckRule,
   HealthState,
   PowerHealthPayload,
+  RtcStatusPayload,
 } from "../types/telemetry";
 import type { TelemetrySourceStatus } from "../transport/telemetrySource";
 import type { SoakMetrics } from "../store/telemetryStore";
@@ -177,6 +178,7 @@ export type NovaScValidationReport = {
   };
   chip_status_summary: Record<string, unknown>;
   power_health_summary: Record<string, unknown>;
+  rtc_status_summary: Record<string, unknown> | null;
   expected_warnings: HealthCheckRule[];
   known_limitations: string[];
   disabled_features: string[];
@@ -200,6 +202,7 @@ export function buildNovaScValidationReport(params: {
   };
   gatewayHealth: GatewayHealthPayload | null;
   powerHealth: PowerHealthPayload | null;
+  rtcStatus: RtcStatusPayload | null;
   activeTelemetrySource: TelemetrySourceStatus;
   globalHealth: HealthState;
   connectionState: ConnectionState;
@@ -406,6 +409,7 @@ export function buildNovaScValidationReport(params: {
       params.deviceRegistry,
       params.powerHealth
     ),
+    rtc_status_summary: buildRtcStatusSummary(params.rtcStatus),
     expected_warnings: healthCheck.rules.filter(
       (rule) =>
         rule.category === "EXPECTED_WARNING" || rule.rule_id.includes("FRAM")
@@ -592,6 +596,29 @@ function buildPowerHealthSummary(
           note: "Raw ADS1115 input voltage only; not calibrated rail voltage",
         }
       : null,
+  };
+}
+
+function buildRtcStatusSummary(rtcStatus: RtcStatusPayload | null) {
+  if (!rtcStatus) return null;
+
+  return {
+    rtc_device: rtcStatus.rtc_device,
+    rtc_address: rtcStatus.rtc_address,
+    rtc_detected: rtcStatus.rtc_detected,
+    rtc_register_read_ok: rtcStatus.rtc_register_read_ok,
+    oscillator_stop_flag: rtcStatus.oscillator_stop_flag,
+    backup_battery_present: rtcStatus.backup_battery_present,
+    backup_battery_configured: rtcStatus.backup_battery_configured ?? null,
+    rtc_time_valid: rtcStatus.rtc_time_valid,
+    rtc_status: rtcStatus.rtc_status,
+    time_source: rtcStatus.time_source,
+    sync_source: rtcStatus.sync_source,
+    source_uptime_ms: rtcStatus.source_uptime_ms,
+    rtc_time: rtcStatus.rtc_time,
+    rtc_time_utc: rtcStatus.rtc_time_utc,
+    status_message: rtcStatus.status_message,
+    note: "DS3231 is read-only telemetry in Phase 7.2B; it is not timestamp authority yet.",
   };
 }
 

@@ -89,6 +89,7 @@ export type EventType =
   | "SYSTEM_HEALTH_TELEMETRY"
   | "CHIP_STATUS_TELEMETRY"
   | "POWER_HEALTH_TELEMETRY"
+  | "RTC_STATUS_TELEMETRY"
   | "GATEWAY_HEALTH_TELEMETRY"
   | "LINK_HEARTBEAT_TELEMETRY"
   | "LINK_SYNC_TELEMETRY"
@@ -171,6 +172,53 @@ export type PowerHealthPayload = {
     ain2_v: number | null;
     ain3_v: number | null;
   };
+};
+
+export type RtcStatus =
+  | "RTC_NOT_DETECTED"
+  | "RTC_REGISTER_READ_ERROR"
+  | "RTC_OSCILLATOR_STOPPED"
+  | "RTC_TIME_VALIDATION_PENDING"
+  | "RTC_TIME_READ_ERROR"
+  | "RTC_12H_MODE_UNSUPPORTED"
+  | "RTC_DETECTED_UNVALIDATED";
+
+export type RtcRawTime = {
+  seconds_bcd: string;
+  minutes_bcd: string;
+  hours_bcd: string;
+  day_bcd: string;
+  date_bcd: string;
+  month_bcd: string;
+  year_bcd: string;
+};
+
+export type RtcDecodedTime = {
+  year: number;
+  month: number;
+  date: number;
+  hour: number;
+  minute: number;
+  second: number;
+};
+
+export type RtcStatusPayload = {
+  rtc_device: "DS3231";
+  rtc_address: "0x68";
+  rtc_detected: boolean;
+  rtc_register_read_ok: boolean;
+  rtc_time_raw: RtcRawTime | null;
+  rtc_time: RtcDecodedTime | null;
+  rtc_time_utc: string | null;
+  rtc_time_valid: boolean;
+  rtc_status: RtcStatus;
+  oscillator_stop_flag: boolean | null;
+  backup_battery_present: boolean;
+  backup_battery_configured?: boolean;
+  time_source: string;
+  sync_source: string | null;
+  source_uptime_ms: number;
+  status_message: string;
 };
 
 export type GatewayHealthPayload = {
@@ -301,6 +349,21 @@ export type TelemetryPacket =
       node_id: string;
       event_type: "POWER_HEALTH_TELEMETRY";
       payload: PowerHealthPayload;
+    }
+  | {
+      schema_version: string;
+      stream_id: string;
+      global_sequence_number: number;
+      source_node_id: string;
+      source_sequence_number: number;
+      producer_timestamp_utc: string;
+      supervisor_received_utc: string;
+      timestamp_utc: string;
+      sequence_number: number;
+      run_id: string;
+      node_id: string;
+      event_type: "RTC_STATUS_TELEMETRY";
+      payload: RtcStatusPayload;
     }
   | {
       schema_version: string;

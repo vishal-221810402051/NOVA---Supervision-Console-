@@ -10,6 +10,7 @@ export function ReportExportPanel() {
   const linkRegistrySummary = useTelemetryStore((s) => s.linkRegistrySummary);
   const gatewayHealth = useTelemetryStore((s) => s.gatewayHealth);
   const powerHealth = useTelemetryStore((s) => s.powerHealth);
+  const rtcStatus = useTelemetryStore((s) => s.rtcStatus);
   const activeTelemetrySource = useTelemetryStore((s) => s.activeTelemetrySource);
   const globalHealth = useTelemetryStore((s) => s.globalHealth);
   const connectionState = useTelemetryStore((s) => s.connectionState);
@@ -47,6 +48,7 @@ export function ReportExportPanel() {
       linkRegistrySummary,
       gatewayHealth,
       powerHealth,
+      rtcStatus,
       activeTelemetrySource,
       globalHealth,
       connectionState,

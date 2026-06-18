@@ -37,6 +37,7 @@ const ALLOWED_EVENT_TYPES: EventType[] = [
   "SYSTEM_HEALTH_TELEMETRY",
   "CHIP_STATUS_TELEMETRY",
   "POWER_HEALTH_TELEMETRY",
+  "RTC_STATUS_TELEMETRY",
   "TELEMETRY_INTEGRITY_EVENT",
 ];
 const HEALTH_STATES: HealthState[] = ["HEALTHY", "DEGRADED", "OFFLINE", "FAIL_SAFE"];
@@ -80,6 +81,15 @@ const CHIP_DEVICE_STATUSES: ChipDeviceStatus[] = [
   "DETECTED_UNCONFIRMED",
   "BLOCKED_WRONG_IC_PENDING",
 ];
+const RTC_STATUSES = [
+  "RTC_NOT_DETECTED",
+  "RTC_REGISTER_READ_ERROR",
+  "RTC_OSCILLATOR_STOPPED",
+  "RTC_TIME_VALIDATION_PENDING",
+  "RTC_TIME_READ_ERROR",
+  "RTC_12H_MODE_UNSUPPORTED",
+  "RTC_DETECTED_UNVALIDATED",
+] as const;
 
 const LINK_TOPOLOGY: Record<LinkId, { source: NodeId; target: NodeId }> = {
   link_laptop_pi: { source: "pi_gateway", target: "laptop_console" },
@@ -259,6 +269,9 @@ function validatePayload(
   }
   if (eventType === "POWER_HEALTH_TELEMETRY") {
     return validatePowerHealth(payload, raw);
+  }
+  if (eventType === "RTC_STATUS_TELEMETRY") {
+    return validateRtcStatusPayload(payload, packetSourceNodeId, raw);
   }
   return validateTelemetryIntegrityEvent(payload, raw);
 }
@@ -454,6 +467,93 @@ function validatePowerHealth(payload: PacketRecord, raw: unknown): PacketValidat
     return invalidPayload("Invalid ads1115_channels", raw);
   }
   return ok(raw);
+}
+
+function validateRtcStatusPayload(
+  payload: PacketRecord,
+  packetSourceNodeId: NodeId,
+  raw: unknown
+): PacketValidationResult {
+  if (packetSourceNodeId !== "esp32_main") {
+    return reject("EVENT_SOURCE_MISMATCH", "RTC status must originate from esp32_main", "ERROR", raw);
+  }
+  if (payload.rtc_device !== "DS3231") return invalidPayload("rtc_device must be DS3231", raw);
+  if (payload.rtc_address !== "0x68") return invalidPayload("rtc_address must be 0x68", raw);
+  if (typeof payload.rtc_detected !== "boolean") return invalidPayload("rtc_detected must be boolean", raw);
+  if (typeof payload.rtc_register_read_ok !== "boolean") {
+    return invalidPayload("rtc_register_read_ok must be boolean", raw);
+  }
+  if (payload.rtc_time_raw !== null && !validateRtcRawTime(payload.rtc_time_raw)) {
+    return invalidPayload("Invalid rtc_time_raw", raw);
+  }
+  if (payload.rtc_time !== null && !validateRtcDecodedTime(payload.rtc_time)) {
+    return invalidPayload("Invalid rtc_time", raw);
+  }
+  if (payload.rtc_time_utc !== null && !isValidTimestamp(payload.rtc_time_utc)) {
+    return reject("INVALID_TIMESTAMP", "Invalid rtc_time_utc", "ERROR", raw);
+  }
+  if (typeof payload.rtc_time_valid !== "boolean") return invalidPayload("rtc_time_valid must be boolean", raw);
+  if (!RTC_STATUSES.includes(payload.rtc_status as (typeof RTC_STATUSES)[number])) {
+    return invalidPayload("Invalid rtc_status", raw);
+  }
+  if (
+    payload.oscillator_stop_flag !== null &&
+    typeof payload.oscillator_stop_flag !== "boolean"
+  ) {
+    return invalidPayload("oscillator_stop_flag must be boolean or null", raw);
+  }
+  if (typeof payload.backup_battery_present !== "boolean") {
+    return invalidPayload("backup_battery_present must be boolean", raw);
+  }
+  if (
+    payload.backup_battery_configured !== undefined &&
+    typeof payload.backup_battery_configured !== "boolean"
+  ) {
+    return invalidPayload("backup_battery_configured must be boolean when present", raw);
+  }
+  if (typeof payload.time_source !== "string" || payload.time_source.length === 0) {
+    return invalidPayload("time_source must be a nonempty string", raw);
+  }
+  if (payload.sync_source !== null && typeof payload.sync_source !== "string") {
+    return invalidPayload("sync_source must be string or null", raw);
+  }
+  if (!isNonNegativeNumber(payload.source_uptime_ms)) {
+    return invalidNumeric("Invalid source_uptime_ms", raw);
+  }
+  if (typeof payload.status_message !== "string") return invalidPayload("status_message must be string", raw);
+  if (payload.rtc_time_valid) {
+    return invalidPayload("rtc_time_valid must remain false in Phase 7.2B", raw);
+  }
+  return ok(raw);
+}
+
+function validateRtcRawTime(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    isHexByteString(value.seconds_bcd) &&
+    isHexByteString(value.minutes_bcd) &&
+    isHexByteString(value.hours_bcd) &&
+    isHexByteString(value.day_bcd) &&
+    isHexByteString(value.date_bcd) &&
+    isHexByteString(value.month_bcd) &&
+    isHexByteString(value.year_bcd)
+  );
+}
+
+function validateRtcDecodedTime(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    isNumberInRange(value.year, 2000, 2099) &&
+    isNumberInRange(value.month, 1, 12) &&
+    isNumberInRange(value.date, 1, 31) &&
+    isNumberInRange(value.hour, 0, 23) &&
+    isNumberInRange(value.minute, 0, 59) &&
+    isNumberInRange(value.second, 0, 59)
+  );
+}
+
+function isHexByteString(value: unknown): boolean {
+  return typeof value === "string" && /^0x[0-9A-Fa-f]{2}$/.test(value);
 }
 
 function validateAds1115RawChannels(value: unknown): boolean {

@@ -36,6 +36,7 @@ static constexpr uint32_t LINK_HEARTBEAT_INTERVAL_MS = 500;
 static constexpr uint32_t LINK_SYNC_INTERVAL_MS = 2000;
 static constexpr uint32_t CHIP_STATUS_INTERVAL_MS = 5000;
 static constexpr uint32_t POWER_HEALTH_INTERVAL_MS = 2000;
+static constexpr uint32_t RTC_STATUS_INTERVAL_MS = 5000;
 static constexpr uint32_t LINK_TIMEOUT_MS = 3000;
 static constexpr uint32_t MISSED_HEARTBEAT_THRESHOLD = 3;
 
@@ -57,6 +58,7 @@ static constexpr int I2C_SCL_PIN = 9;
 
 static constexpr uint8_t ADS1115_ADDRESS = 0x48;
 static constexpr uint8_t DS3231_RTC_ADDRESS = 0x68;
+static constexpr bool DS3231_BACKUP_BATTERY_CONFIGURED = true;
 static constexpr uint8_t PCA9685_1_ADDRESS = 0x40;
 static constexpr uint8_t PCA9685_2_ADDRESS = 0x41;
 static constexpr uint8_t PCA9685_ALLCALL_ADDRESS = 0x70;

@@ -4,7 +4,16 @@
 
 #include "ads1115_raw_reader.h"
 #include "board_config.h"
+#include "ds3231_rtc_reader.h"
 #include "safe_bus_probe.h"
+
+namespace {
+void writeHexByte(JsonObject object, const char *key, uint8_t value) {
+  char text[5];
+  snprintf(text, sizeof(text), "0x%02X", value);
+  object[key] = text;
+}
+}  // namespace
 
 TelemetryScheduler::TelemetryScheduler(Stream &telemetryPort)
     : telemetryPort_(telemetryPort),
@@ -13,7 +22,8 @@ TelemetryScheduler::TelemetryScheduler(Stream &telemetryPort)
       lastLinkHeartbeatMs_(0),
       lastLinkSyncMs_(0),
       lastChipStatusMs_(0),
-      lastPowerHealthMs_(0) {}
+      lastPowerHealthMs_(0),
+      lastRtcStatusMs_(0) {}
 
 void TelemetryScheduler::begin() {
   const uint32_t nowMs = millis();
@@ -22,6 +32,7 @@ void TelemetryScheduler::begin() {
   lastLinkSyncMs_ = nowMs - LINK_SYNC_INTERVAL_MS;
   lastChipStatusMs_ = nowMs - CHIP_STATUS_INTERVAL_MS;
   lastPowerHealthMs_ = nowMs - POWER_HEALTH_INTERVAL_MS;
+  lastRtcStatusMs_ = nowMs - RTC_STATUS_INTERVAL_MS;
 }
 
 void TelemetryScheduler::update() {
@@ -31,6 +42,7 @@ void TelemetryScheduler::update() {
   maybeEmit(nowMs, lastLinkSyncMs_, LINK_SYNC_INTERVAL_MS, &TelemetryScheduler::emitLinkSync);
   maybeEmit(nowMs, lastPowerHealthMs_, POWER_HEALTH_INTERVAL_MS, &TelemetryScheduler::emitPowerHealth);
   maybeEmit(nowMs, lastChipStatusMs_, CHIP_STATUS_INTERVAL_MS, &TelemetryScheduler::emitChipStatus);
+  maybeEmit(nowMs, lastRtcStatusMs_, RTC_STATUS_INTERVAL_MS, &TelemetryScheduler::emitRtcStatus);
 }
 
 void TelemetryScheduler::maybeEmit(
@@ -60,6 +72,60 @@ void TelemetryScheduler::emitNodeHealth() {
   payload["free_heap_bytes"] = ESP.getFreeHeap();
   payload["brownout_count"] = 0;
   payload["status_message"] = "MAIN ESP32 telemetry firmware healthy";
+
+  packetBuilder_.emitPacket(doc, telemetryPort_);
+}
+
+void TelemetryScheduler::emitRtcStatus() {
+  JsonDocument doc;
+  packetBuilder_.beginPacket(doc, "RTC_STATUS");
+  JsonObject payload = doc["payload"].as<JsonObject>();
+  Ds3231RtcStatus rtcStatus;
+  readDs3231RtcStatus(rtcStatus);
+
+  payload["rtc_device"] = "DS3231";
+  payload["rtc_address"] = "0x68";
+  payload["rtc_detected"] = rtcStatus.detected;
+  payload["rtc_register_read_ok"] = rtcStatus.register_read_ok;
+  payload["rtc_time_utc"] = nullptr;
+  payload["rtc_time_valid"] = false;
+  payload["rtc_status"] = classifyDs3231RtcStatus(rtcStatus);
+  if (rtcStatus.status_register_read_ok) {
+    payload["oscillator_stop_flag"] = rtcStatus.oscillator_stop_flag;
+  } else {
+    payload["oscillator_stop_flag"] = nullptr;
+  }
+  payload["backup_battery_present"] = DS3231_BACKUP_BATTERY_CONFIGURED;
+  payload["backup_battery_configured"] = DS3231_BACKUP_BATTERY_CONFIGURED;
+  payload["time_source"] = "DS3231_UNVERIFIED";
+  payload["sync_source"] = nullptr;
+  payload["source_uptime_ms"] = millis();
+  payload["status_message"] = describeDs3231RtcStatus(rtcStatus);
+
+  if (rtcStatus.time_register_read_ok) {
+    JsonObject raw = payload["rtc_time_raw"].to<JsonObject>();
+    writeHexByte(raw, "seconds_bcd", rtcStatus.raw_time.seconds_bcd);
+    writeHexByte(raw, "minutes_bcd", rtcStatus.raw_time.minutes_bcd);
+    writeHexByte(raw, "hours_bcd", rtcStatus.raw_time.hours_bcd);
+    writeHexByte(raw, "day_bcd", rtcStatus.raw_time.day_bcd);
+    writeHexByte(raw, "date_bcd", rtcStatus.raw_time.date_bcd);
+    writeHexByte(raw, "month_bcd", rtcStatus.raw_time.month_bcd);
+    writeHexByte(raw, "year_bcd", rtcStatus.raw_time.year_bcd);
+  } else {
+    payload["rtc_time_raw"] = nullptr;
+  }
+
+  if (rtcStatus.decoded_time_ok) {
+    JsonObject time = payload["rtc_time"].to<JsonObject>();
+    time["year"] = rtcStatus.decoded_time.year;
+    time["month"] = rtcStatus.decoded_time.month;
+    time["date"] = rtcStatus.decoded_time.date;
+    time["hour"] = rtcStatus.decoded_time.hour;
+    time["minute"] = rtcStatus.decoded_time.minute;
+    time["second"] = rtcStatus.decoded_time.second;
+  } else {
+    payload["rtc_time"] = nullptr;
+  }
 
   packetBuilder_.emitPacket(doc, telemetryPort_);
 }

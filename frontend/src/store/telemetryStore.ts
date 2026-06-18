@@ -6,6 +6,7 @@ import type {
   GatewayHealthPayload,
   PacketValidationResult,
   PowerHealthPayload,
+  RtcStatusPayload,
   SystemHealthPayload,
   TelemetryPacket,
 } from "../types/telemetry";
@@ -124,6 +125,7 @@ type TelemetryState = {
   systemHealth: SystemHealthPayload | null;
   chipStatus: ChipStatusPayload | null;
   powerHealth: PowerHealthPayload | null;
+  rtcStatus: RtcStatusPayload | null;
   gatewayHealth: GatewayHealthPayload | null;
   deviceRegistry: DeviceRegistry;
   registrySummary: ReturnType<typeof getRegistrySummary>;
@@ -276,6 +278,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   systemHealth: null,
   chipStatus: null,
   powerHealth: null,
+  rtcStatus: null,
   gatewayHealth: null,
   deviceRegistry: createInitialDeviceRegistry(),
   registrySummary: getRegistrySummary(createInitialDeviceRegistry()),
@@ -829,6 +832,10 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           packet.event_type === "POWER_HEALTH_TELEMETRY"
             ? packet.payload
             : state.powerHealth,
+        rtcStatus:
+          packet.event_type === "RTC_STATUS_TELEMETRY"
+            ? packet.payload
+            : state.rtcStatus,
         gatewayHealth:
           packet.event_type === "GATEWAY_HEALTH_TELEMETRY"
             ? packet.payload

@@ -19,6 +19,7 @@ class TelemetryScheduler {
   void emitLinkSync();
   void emitChipStatus();
   void emitPowerHealth();
+  void emitRtcStatus();
 
   Stream &telemetryPort_;
   TelemetryPacketBuilder packetBuilder_;
@@ -28,4 +29,5 @@ class TelemetryScheduler {
   uint32_t lastLinkSyncMs_;
   uint32_t lastChipStatusMs_;
   uint32_t lastPowerHealthMs_;
+  uint32_t lastRtcStatusMs_;
 };
