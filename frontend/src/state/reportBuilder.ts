@@ -22,6 +22,7 @@ import {
   type LiveVsReplaySummary,
   type ReplaySnapshot,
 } from "./replayReducer";
+import { deriveRtcValidity } from "./rtcValidity";
 
 export type NovaScValidationReport = {
   report_type: "NOVA_SC_SUPERVISORY_VALIDATION_REPORT";
@@ -601,6 +602,7 @@ function buildPowerHealthSummary(
 
 function buildRtcStatusSummary(rtcStatus: RtcStatusPayload | null) {
   if (!rtcStatus) return null;
+  const validity = deriveRtcValidity(rtcStatus);
 
   return {
     rtc_device: rtcStatus.rtc_device,
@@ -618,6 +620,14 @@ function buildRtcStatusSummary(rtcStatus: RtcStatusPayload | null) {
     rtc_time: rtcStatus.rtc_time,
     rtc_time_utc: rtcStatus.rtc_time_utc,
     status_message: rtcStatus.status_message,
+    rtc_validity_class: validity.rtc_validity_class,
+    rtc_validity_reason: validity.rtc_validity_reason,
+    timestamp_authority: validity.timestamp_authority,
+    timestamp_authority_source: validity.timestamp_authority_source,
+    rtc_can_be_timestamp_authority: validity.rtc_can_be_timestamp_authority,
+    required_next_action: validity.required_next_action,
+    phase_7_2c_verdict: validity.phase_7_2c_verdict,
+    evidence_note: validity.evidence_note,
     note: "DS3231 is read-only telemetry in Phase 7.2B; it is not timestamp authority yet.",
   };
 }

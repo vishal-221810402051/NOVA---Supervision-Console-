@@ -1,9 +1,11 @@
 import { useTelemetryStore } from "../store/telemetryStore";
 import type { RtcDecodedTime } from "../types/telemetry";
+import { deriveRtcValidity } from "../state/rtcValidity";
 
 export function RtcStatus() {
   const rtc = useTelemetryStore((state) => state.rtcStatus);
   const isTelemetryStale = useTelemetryStore((state) => state.isTelemetryStale);
+  const validity = deriveRtcValidity(rtc);
 
   return (
     <section className="border border-slate-800 bg-slate-950 p-4">
@@ -13,6 +15,21 @@ export function RtcStatus() {
       <div className="mb-4 border border-amber-500/60 bg-amber-950/20 px-3 py-2 text-xs font-bold uppercase tracking-widest text-amber-300">
         Read-only RTC telemetry. DS3231 is not timestamp authority in Phase 7.2B.
       </div>
+      <section className="mb-4 border border-amber-500/40 bg-amber-950/10 p-3">
+        <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-amber-300">
+          Phase 7.2C Validity Evidence
+        </h3>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <Metric label="RTC Validity Class" value={validity.rtc_validity_class} />
+          <Metric label="Timestamp Authority" value={validity.timestamp_authority} />
+          <Metric label="Authority Source" value={validity.timestamp_authority_source} />
+          <Metric label="RTC Can Be Authority" value={formatBoolean(validity.rtc_can_be_timestamp_authority)} />
+          <Metric label="Required Next Action" value={validity.required_next_action} />
+          <Metric label="Phase 7.2C Verdict" value={validity.phase_7_2c_verdict} />
+          <Metric label="Validity Reason" value={validity.rtc_validity_reason} />
+          <Metric label="Evidence Note" value={validity.evidence_note} />
+        </div>
+      </section>
       {isTelemetryStale && (
         <div className="mb-4 text-xs uppercase tracking-widest text-amber-300">
           Telemetry is stale; values are last known state.
