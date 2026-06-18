@@ -12,11 +12,13 @@ import { GlobalStatusBar } from "./components/GlobalStatusBar";
 import { HealthCheckPanel } from "./components/HealthCheckPanel";
 import { ReportExportPanel } from "./components/ReportExportPanel";
 import { TopologyView } from "./components/TopologyView";
+import { RtcStatus } from "./components/RtcStatus";
 
 type Page =
   | "overview"
   | "chips"
   | "power"
+  | "rtc"
   | "logs"
   | "registry"
   | "health"
@@ -63,12 +65,13 @@ export default function App() {
 
         <main className="grid gap-4 p-6">
           <GlobalStatusBar />
-          <TelemetryStats />
+          {activePage === "overview" && <TelemetryStats />}
 
           {activePage === "overview" && <SystemOverview />}
           {activePage === "topology" && <TopologyView />}
           {activePage === "chips" && <ChipStatus />}
           {activePage === "power" && <PowerHealth />}
+          {activePage === "rtc" && <RtcStatus />}
           {activePage === "logs" && <EngineeringLogs />}
           {activePage === "registry" && <DeviceRegistryPanel />}
           {activePage === "health" && <HealthCheckPanel />}
