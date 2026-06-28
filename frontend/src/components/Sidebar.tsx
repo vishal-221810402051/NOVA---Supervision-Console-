@@ -2,6 +2,7 @@ type Page =
   | "overview"
   | "chips"
   | "power"
+  | "rtc"
   | "logs"
   | "registry"
   | "health"
@@ -18,6 +19,7 @@ const items: { id: Page; label: string }[] = [
   { id: "topology", label: "Topology" },
   { id: "chips", label: "Chip Status" },
   { id: "power", label: "Power Health" },
+  { id: "rtc", label: "RTC Status" },
   { id: "logs", label: "Engineering Logs" },
   { id: "registry", label: "Device Registry" },
   { id: "health", label: "V1 Health Check" },

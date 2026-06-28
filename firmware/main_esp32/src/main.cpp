@@ -2,6 +2,7 @@
 #include <Wire.h>
 
 #include "board_config.h"
+#include "rtc_sync_request_parser.h"
 #include "sub_uart_forwarder.h"
 #include "telemetry_scheduler.h"
 
@@ -38,5 +39,6 @@ void setup() {
 
 void loop() {
   processSubTelemetryForwarding();
+  processPiRtcSyncRequests();
   telemetryScheduler.update();
 }

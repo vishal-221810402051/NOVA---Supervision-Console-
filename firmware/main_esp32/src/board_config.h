@@ -40,6 +40,11 @@ static constexpr uint32_t RTC_STATUS_INTERVAL_MS = 5000;
 static constexpr uint32_t LINK_TIMEOUT_MS = 3000;
 static constexpr uint32_t MISSED_HEARTBEAT_THRESHOLD = 3;
 
+static constexpr size_t PI_RTC_SYNC_MAX_FRAME_LENGTH = 512;
+static constexpr size_t PI_RTC_SYNC_MAX_BYTES_PER_LOOP = 128;
+static constexpr size_t PI_RTC_SYNC_SESSION_CACHE_SIZE = 8;
+static constexpr size_t PI_RTC_SYNC_SESSION_ID_MAX_LENGTH = 48;
+
 // Phase 6.4E controlled read-only I2C validation:
 // - GPIO8/GPIO9 are confirmed NOVA B1 I2C SDA/SCL pins.
 // - DETECTED requires stable ACK plus functional register-read validation.

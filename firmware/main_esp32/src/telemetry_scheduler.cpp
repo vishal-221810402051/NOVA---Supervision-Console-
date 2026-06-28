@@ -76,6 +76,42 @@ void TelemetryScheduler::emitNodeHealth() {
   packetBuilder_.emitPacket(doc, telemetryPort_);
 }
 
+void TelemetryScheduler::emitRtcSyncResult(const RtcSyncResultTelemetry &result) {
+  JsonDocument doc;
+  packetBuilder_.beginPacket(doc, "RTC_SYNC_RESULT");
+  JsonObject payload = doc["payload"].as<JsonObject>();
+
+  payload["message_type"] = "RTC_SYNC_RESULT";
+  payload["protocol_version"] = 1;
+  if (result.request_message_type != nullptr) {
+    payload["request_message_type"] = result.request_message_type;
+  } else {
+    payload["request_message_type"] = nullptr;
+  }
+  if (result.session_sync_id != nullptr) {
+    payload["session_sync_id"] = result.session_sync_id;
+  } else {
+    payload["session_sync_id"] = nullptr;
+  }
+  payload["accepted"] = false;
+  payload["result"] = "REJECTED";
+  payload["reason_code"] = result.reason_code;
+  payload["reason_detail"] = result.reason_detail;
+  if (result.safety_scope != nullptr) {
+    payload["safety_scope"] = result.safety_scope;
+  } else {
+    payload["safety_scope"] = nullptr;
+  }
+  payload["no_forward_to_sub"] = true;
+  payload["rtc_write_attempted"] = false;
+  payload["osf_clear_attempted"] = false;
+  payload["forwarded_to_sub"] = false;
+  payload["control_output_touched"] = false;
+  payload["source_uptime_ms"] = millis();
+
+  packetBuilder_.emitPacket(doc, telemetryPort_);
+}
+
 void TelemetryScheduler::emitRtcStatus() {
   JsonDocument doc;
   packetBuilder_.beginPacket(doc, "RTC_STATUS");
