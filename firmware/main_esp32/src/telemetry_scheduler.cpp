@@ -93,21 +93,53 @@ void TelemetryScheduler::emitRtcSyncResult(const RtcSyncResultTelemetry &result)
   } else {
     payload["session_sync_id"] = nullptr;
   }
-  payload["accepted"] = false;
-  payload["result"] = "REJECTED";
-  payload["reason_code"] = result.reason_code;
-  payload["reason_detail"] = result.reason_detail;
+  payload["accepted"] = result.accepted;
+  payload["result"] = result.result;
+  if (result.reason_code != nullptr) {
+    payload["reason_code"] = result.reason_code;
+  } else {
+    payload["reason_code"] = nullptr;
+  }
+  if (result.reason_detail != nullptr) {
+    payload["reason_detail"] = result.reason_detail;
+  } else {
+    payload["reason_detail"] = nullptr;
+  }
   if (result.safety_scope != nullptr) {
     payload["safety_scope"] = result.safety_scope;
   } else {
     payload["safety_scope"] = nullptr;
   }
   payload["no_forward_to_sub"] = true;
-  payload["rtc_write_attempted"] = false;
-  payload["osf_clear_attempted"] = false;
+  payload["rtc_write_attempted"] = result.rtc_write_attempted;
+  payload["osf_clear_attempted"] = result.osf_clear_attempted;
   payload["forwarded_to_sub"] = false;
   payload["control_output_touched"] = false;
   payload["source_uptime_ms"] = millis();
+  payload["timestamp_authority_after_sync"] = "PI_BACKEND_UTC";
+
+  if (result.transaction_evidence_present) {
+    payload["write_ok"] = result.write_ok;
+    payload["readback_ok"] = result.readback_ok;
+    if (result.readback_delta_available) {
+      payload["readback_delta_ms"] = result.readback_delta_ms;
+    } else {
+      payload["readback_delta_ms"] = nullptr;
+    }
+    if (result.osf_before_available) {
+      payload["osf_before"] = result.osf_before;
+    } else {
+      payload["osf_before"] = nullptr;
+    }
+    if (result.osf_after_available) {
+      payload["osf_after"] = result.osf_after;
+    } else {
+      payload["osf_after"] = nullptr;
+    }
+    payload["osf_cleared"] = result.osf_cleared;
+    payload["rtc_validity_class_after_sync"] = result.rtc_validity_class_after_sync;
+    payload["status_message"] = result.status_message;
+  }
 
   packetBuilder_.emitPacket(doc, telemetryPort_);
 }

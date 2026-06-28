@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "board_config.h"
+#include "ds3231_rtc_sync.h"
 #include "telemetry_scheduler.h"
 
 extern HardwareSerial PiTelemetrySerial;
@@ -66,6 +67,11 @@ void emitResult(
     const char *requestMessageType = nullptr,
     const char *sessionSyncId = nullptr,
     const char *safetyScope = nullptr);
+void emitTransactionResult(
+    const Ds3231SyncResult &syncResult,
+    const char *requestMessageType,
+    const char *sessionSyncId,
+    const char *safetyScope);
 }  // namespace
 
 void processPiRtcSyncRequests() {
@@ -543,12 +549,9 @@ void handlePiLine(const char *line) {
     return;
   }
 
-  emitResult(
-      "SYNC_NOT_IMPLEMENTED",
-      "Phase 7.2E-3B observes valid request but RTC writes are disabled",
-      requestMessageType,
-      sessionSyncId,
-      safetyScope);
+  Ds3231SyncResult syncResult;
+  performDs3231SessionSync(sourceUtc, syncResult);
+  emitTransactionResult(syncResult, requestMessageType, sessionSyncId, safetyScope);
 }
 
 void emitResult(
@@ -560,9 +563,61 @@ void emitResult(
   RtcSyncResultTelemetry result = {
       requestMessageType,
       sessionSyncId,
+      false,
+      "REJECTED",
       reasonCode,
       reasonDetail,
       safetyScope,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      0,
+      false,
+      false,
+      false,
+      false,
+      false,
+      nullptr,
+      nullptr,
+  };
+  telemetryScheduler.emitRtcSyncResult(result);
+}
+
+void emitTransactionResult(
+    const Ds3231SyncResult &syncResult,
+    const char *requestMessageType,
+    const char *sessionSyncId,
+    const char *safetyScope) {
+  const bool success =
+      syncResult.write_ok &&
+      syncResult.readback_ok &&
+      syncResult.osf_cleared &&
+      strcmp(syncResult.rtc_validity_class_after_sync, "RTC_VALIDATION_READY") == 0;
+  RtcSyncResultTelemetry result = {
+      requestMessageType,
+      sessionSyncId,
+      success,
+      success ? "RTC_SYNC_SUCCESS" : "RTC_SYNC_FAILED",
+      success ? nullptr : syncResult.sync_error,
+      success ? nullptr : syncResult.status_message,
+      safetyScope,
+      syncResult.write_attempted,
+      syncResult.osf_clear_attempted,
+      true,
+      syncResult.write_ok,
+      syncResult.readback_ok,
+      syncResult.readback_delta_available,
+      syncResult.readback_delta_ms,
+      syncResult.osf_before_available,
+      syncResult.osf_before,
+      syncResult.osf_after_available,
+      syncResult.osf_after,
+      syncResult.osf_cleared,
+      syncResult.rtc_validity_class_after_sync,
+      success ? "RTC synchronized; retention validation pending" : syncResult.status_message,
   };
   telemetryScheduler.emitRtcSyncResult(result);
 }

@@ -70,7 +70,9 @@ bool performDs3231SessionSync(const char *sourceUtc, Ds3231SyncResult &result) {
     return false;
   }
   result.osf_before = (statusBefore & DS3231_OSF_MASK) != 0;
+  result.osf_before_available = true;
 
+  result.write_attempted = true;
   result.write_ok = writeTimeRegisters(parsedSource);
   if (!result.write_ok) {
     failResult(
@@ -81,6 +83,7 @@ bool performDs3231SessionSync(const char *sourceUtc, Ds3231SyncResult &result) {
   }
 
   ParsedUtc readbackUtc;
+  result.readback_attempted = true;
   result.readback_ok = readbackTime(readbackUtc);
   if (!result.readback_ok) {
     failResult(
@@ -95,6 +98,7 @@ bool performDs3231SessionSync(const char *sourceUtc, Ds3231SyncResult &result) {
   const long readbackDeltaMs =
       static_cast<long>(readbackDeltaSeconds * 1000LL - parsedSource.millisecond);
   result.readback_delta_ms = readbackDeltaMs;
+  result.readback_delta_available = true;
   if (absoluteLong(readbackDeltaMs) > READBACK_TOLERANCE_MS) {
     failResult(
         result,
@@ -123,6 +127,7 @@ bool performDs3231SessionSync(const char *sourceUtc, Ds3231SyncResult &result) {
   }
 
   result.osf_after = (statusAfter & DS3231_OSF_MASK) != 0;
+  result.osf_after_available = true;
   result.osf_cleared = !result.osf_after;
   if (!result.osf_cleared) {
     failResult(
@@ -142,10 +147,15 @@ bool performDs3231SessionSync(const char *sourceUtc, Ds3231SyncResult &result) {
 
 namespace {
 void resetResult(Ds3231SyncResult &result) {
+  result.write_attempted = false;
   result.write_ok = false;
+  result.readback_attempted = false;
   result.readback_ok = false;
+  result.readback_delta_available = false;
   result.readback_delta_ms = 0;
+  result.osf_before_available = false;
   result.osf_before = false;
+  result.osf_after_available = false;
   result.osf_after = false;
   result.osf_clear_attempted = false;
   result.osf_cleared = false;
@@ -159,11 +169,11 @@ void failResult(
     Ds3231SyncResult &result,
     const char *syncError,
     const char *statusMessage) {
-  if (!result.osf_clear_attempted) {
-    result.osf_after = result.osf_before;
-  }
   result.osf_cleared = false;
-  result.rtc_validity_class_after_sync = "RTC_NOT_VALIDATED";
+  result.rtc_validity_class_after_sync =
+      result.osf_before_available && result.osf_before
+          ? "RTC_PRESENT_TIME_INVALID_OSF"
+          : "RTC_PRESENT_TIME_UNVALIDATED";
   result.sync_result = "SYNC_FAILED";
   result.sync_error = syncError;
   result.status_message = statusMessage;
