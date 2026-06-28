@@ -54,6 +54,11 @@ type SoakVerdict = {
   warningReasons: string[];
 };
 
+type RtcSyncResultPacket = Extract<
+  TelemetryPacket,
+  { event_type: "RTC_SYNC_RESULT_TELEMETRY" }
+>;
+
 type SoakLinkMetrics = {
   heartbeatCount: number;
   lastHeartbeatAtMs: number | null;
@@ -126,6 +131,7 @@ type TelemetryState = {
   chipStatus: ChipStatusPayload | null;
   powerHealth: PowerHealthPayload | null;
   rtcStatus: RtcStatusPayload | null;
+  latestRtcSyncResult: RtcSyncResultPacket | null;
   gatewayHealth: GatewayHealthPayload | null;
   deviceRegistry: DeviceRegistry;
   registrySummary: ReturnType<typeof getRegistrySummary>;
@@ -279,6 +285,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   chipStatus: null,
   powerHealth: null,
   rtcStatus: null,
+  latestRtcSyncResult: null,
   gatewayHealth: null,
   deviceRegistry: createInitialDeviceRegistry(),
   registrySummary: getRegistrySummary(createInitialDeviceRegistry()),
@@ -408,6 +415,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       recentPacketKeys: [],
       logs: [],
       soakMetrics: createInitialSoakMetrics(),
+      latestRtcSyncResult: null,
     }),
 
   resetConnectionStats: () =>
@@ -435,6 +443,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       packetRateHz: 0,
       packetWindow: [],
       logs: [],
+      latestRtcSyncResult: null,
     }),
 
   recordPacketRejection: (result) =>
@@ -836,6 +845,10 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           packet.event_type === "RTC_STATUS_TELEMETRY"
             ? packet.payload
             : state.rtcStatus,
+        latestRtcSyncResult:
+          packet.event_type === "RTC_SYNC_RESULT_TELEMETRY"
+            ? packet
+            : state.latestRtcSyncResult,
         gatewayHealth:
           packet.event_type === "GATEWAY_HEALTH_TELEMETRY"
             ? packet.payload

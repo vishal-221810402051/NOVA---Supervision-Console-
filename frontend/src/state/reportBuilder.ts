@@ -9,7 +9,9 @@ import type {
   HealthCheckRule,
   HealthState,
   PowerHealthPayload,
+  RtcSyncResultPayload,
   RtcStatusPayload,
+  TelemetryPacket,
 } from "../types/telemetry";
 import type { TelemetrySourceStatus } from "../transport/telemetrySource";
 import type { SoakMetrics } from "../store/telemetryStore";
@@ -180,6 +182,7 @@ export type NovaScValidationReport = {
   chip_status_summary: Record<string, unknown>;
   power_health_summary: Record<string, unknown>;
   rtc_status_summary: Record<string, unknown> | null;
+  rtc_sync_summary: Record<string, unknown>;
   expected_warnings: HealthCheckRule[];
   known_limitations: string[];
   disabled_features: string[];
@@ -204,6 +207,7 @@ export function buildNovaScValidationReport(params: {
   gatewayHealth: GatewayHealthPayload | null;
   powerHealth: PowerHealthPayload | null;
   rtcStatus: RtcStatusPayload | null;
+  latestRtcSyncResult: Extract<TelemetryPacket, { event_type: "RTC_SYNC_RESULT_TELEMETRY" }> | null;
   activeTelemetrySource: TelemetrySourceStatus;
   globalHealth: HealthState;
   connectionState: ConnectionState;
@@ -411,6 +415,7 @@ export function buildNovaScValidationReport(params: {
       params.powerHealth
     ),
     rtc_status_summary: buildRtcStatusSummary(params.rtcStatus),
+    rtc_sync_summary: buildRtcSyncSummary(params.latestRtcSyncResult),
     expected_warnings: healthCheck.rules.filter(
       (rule) =>
         rule.category === "EXPECTED_WARNING" || rule.rule_id.includes("FRAM")
@@ -629,6 +634,43 @@ function buildRtcStatusSummary(rtcStatus: RtcStatusPayload | null) {
     phase_7_2c_verdict: validity.phase_7_2c_verdict,
     evidence_note: validity.evidence_note,
     note: "DS3231 is read-only telemetry in Phase 7.2B; it is not timestamp authority yet.",
+  };
+}
+
+function buildRtcSyncSummary(
+  packet: Extract<TelemetryPacket, { event_type: "RTC_SYNC_RESULT_TELEMETRY" }> | null
+) {
+  if (!packet) {
+    return {
+      sync_result_received: false,
+      evidence_note: "No RTC sync result was captured in this frontend session.",
+    };
+  }
+
+  const payload: RtcSyncResultPayload = packet.payload;
+  return {
+    sync_result_received: true,
+    session_sync_id: payload.session_sync_id,
+    result: payload.result,
+    accepted: payload.accepted,
+    write_ok: payload.write_ok,
+    readback_ok: payload.readback_ok,
+    readback_delta_ms: payload.readback_delta_ms,
+    osf_before: payload.osf_before,
+    osf_after: payload.osf_after,
+    osf_cleared: payload.osf_cleared,
+    rtc_validity_class_after_sync: payload.rtc_validity_class_after_sync,
+    timestamp_authority_after_sync: payload.timestamp_authority_after_sync,
+    safety_scope: payload.safety_scope,
+    no_forward_to_sub: payload.no_forward_to_sub,
+    forwarded_to_sub: payload.forwarded_to_sub,
+    control_output_touched: payload.control_output_touched,
+    source_node_id: packet.source_node_id,
+    source_sequence_number: packet.source_sequence_number,
+    timestamp_utc: packet.timestamp_utc,
+    status_message: payload.status_message,
+    evidence_note:
+      "RTC synchronization succeeded and DS3231 reached RTC_VALIDATION_READY, but Pi/backend UTC remains timestamp authority. RTC_VALIDATED requires retention/drift validation in a later phase.",
   };
 }
 

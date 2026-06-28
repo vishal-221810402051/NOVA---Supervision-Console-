@@ -11,6 +11,7 @@ export function ReportExportPanel() {
   const gatewayHealth = useTelemetryStore((s) => s.gatewayHealth);
   const powerHealth = useTelemetryStore((s) => s.powerHealth);
   const rtcStatus = useTelemetryStore((s) => s.rtcStatus);
+  const latestRtcSyncResult = useTelemetryStore((s) => s.latestRtcSyncResult);
   const activeTelemetrySource = useTelemetryStore((s) => s.activeTelemetrySource);
   const globalHealth = useTelemetryStore((s) => s.globalHealth);
   const connectionState = useTelemetryStore((s) => s.connectionState);
@@ -49,6 +50,7 @@ export function ReportExportPanel() {
       gatewayHealth,
       powerHealth,
       rtcStatus,
+      latestRtcSyncResult,
       activeTelemetrySource,
       globalHealth,
       connectionState,

@@ -38,6 +38,7 @@ const ALLOWED_EVENT_TYPES: EventType[] = [
   "CHIP_STATUS_TELEMETRY",
   "POWER_HEALTH_TELEMETRY",
   "RTC_STATUS_TELEMETRY",
+  "RTC_SYNC_RESULT_TELEMETRY",
   "TELEMETRY_INTEGRITY_EVENT",
 ];
 const HEALTH_STATES: HealthState[] = ["HEALTHY", "DEGRADED", "OFFLINE", "FAIL_SAFE"];
@@ -89,6 +90,16 @@ const RTC_STATUSES = [
   "RTC_TIME_READ_ERROR",
   "RTC_12H_MODE_UNSUPPORTED",
   "RTC_DETECTED_UNVALIDATED",
+] as const;
+const RTC_SYNC_RESULTS = ["RTC_SYNC_SUCCESS", "RTC_SYNC_FAILED", "REJECTED"] as const;
+const RTC_SYNC_VALIDITY_CLASSES = [
+  "RTC_NOT_PRESENT",
+  "RTC_READ_ERROR",
+  "RTC_PRESENT_TIME_INVALID_OSF",
+  "RTC_PRESENT_TIME_UNVALIDATED",
+  "RTC_PRESENT_SESSION_ONLY",
+  "RTC_PRESENT_TIME_CANDIDATE",
+  "RTC_VALIDATION_READY",
 ] as const;
 
 const LINK_TOPOLOGY: Record<LinkId, { source: NodeId; target: NodeId }> = {
@@ -272,6 +283,9 @@ function validatePayload(
   }
   if (eventType === "RTC_STATUS_TELEMETRY") {
     return validateRtcStatusPayload(payload, packetSourceNodeId, raw);
+  }
+  if (eventType === "RTC_SYNC_RESULT_TELEMETRY") {
+    return validateRtcSyncResultPayload(payload, packetSourceNodeId, raw);
   }
   return validateTelemetryIntegrityEvent(payload, raw);
 }
@@ -527,6 +541,89 @@ function validateRtcStatusPayload(
   return ok(raw);
 }
 
+function validateRtcSyncResultPayload(
+  payload: PacketRecord,
+  packetSourceNodeId: NodeId,
+  raw: unknown
+): PacketValidationResult {
+  if (packetSourceNodeId !== "esp32_main") {
+    return reject("EVENT_SOURCE_MISMATCH", "RTC sync result must originate from esp32_main", "ERROR", raw);
+  }
+  if (payload.message_type !== "RTC_SYNC_RESULT") return invalidPayload("message_type must be RTC_SYNC_RESULT", raw);
+  if (payload.request_message_type !== "RTC_SESSION_SYNC_REQUEST") {
+    return invalidPayload("request_message_type must be RTC_SESSION_SYNC_REQUEST", raw);
+  }
+  if (payload.protocol_version !== 1) return invalidPayload("protocol_version must be 1", raw);
+  if (!isRtcSyncSessionId(payload.session_sync_id)) {
+    return invalidPayload("Invalid session_sync_id", raw);
+  }
+  if (typeof payload.accepted !== "boolean") return invalidPayload("accepted must be boolean", raw);
+  if (!RTC_SYNC_RESULTS.includes(payload.result as (typeof RTC_SYNC_RESULTS)[number])) {
+    return invalidPayload("Invalid RTC sync result", raw);
+  }
+  if (payload.reason_code !== null && typeof payload.reason_code !== "string") {
+    return invalidPayload("reason_code must be string or null", raw);
+  }
+  if (payload.reason_detail !== null && typeof payload.reason_detail !== "string") {
+    return invalidPayload("reason_detail must be string or null", raw);
+  }
+  if (payload.safety_scope !== "RTC_ONLY") return invalidPayload("safety_scope must be RTC_ONLY", raw);
+  if (payload.no_forward_to_sub !== true) return invalidPayload("no_forward_to_sub must be true", raw);
+  if (payload.forwarded_to_sub !== false) return invalidPayload("forwarded_to_sub must be false", raw);
+  if (payload.control_output_touched !== false) {
+    return invalidPayload("control_output_touched must be false", raw);
+  }
+  if (payload.timestamp_authority_after_sync !== "PI_BACKEND_UTC") {
+    return invalidPayload("timestamp_authority_after_sync must be PI_BACKEND_UTC", raw);
+  }
+  if (!RTC_SYNC_VALIDITY_CLASSES.includes(payload.rtc_validity_class_after_sync as (typeof RTC_SYNC_VALIDITY_CLASSES)[number])) {
+    return invalidPayload("Invalid rtc_validity_class_after_sync", raw);
+  }
+  if (payload.rtc_validity_class_after_sync === "RTC_VALIDATED") {
+    return invalidPayload("RTC_VALIDATED is not accepted in Phase 7.2E-5", raw);
+  }
+  if (typeof payload.rtc_write_attempted !== "boolean") {
+    return invalidPayload("rtc_write_attempted must be boolean", raw);
+  }
+  if (typeof payload.osf_clear_attempted !== "boolean") {
+    return invalidPayload("osf_clear_attempted must be boolean", raw);
+  }
+  if (!isNonNegativeNumber(payload.source_uptime_ms)) {
+    return invalidNumeric("Invalid source_uptime_ms", raw);
+  }
+  if (typeof payload.write_ok !== "boolean") return invalidPayload("write_ok must be boolean", raw);
+  if (typeof payload.readback_ok !== "boolean") return invalidPayload("readback_ok must be boolean", raw);
+  if (payload.readback_delta_ms !== null && !isFiniteNumber(payload.readback_delta_ms)) {
+    return invalidNumeric("readback_delta_ms must be number or null", raw);
+  }
+  if (payload.osf_before !== null && typeof payload.osf_before !== "boolean") {
+    return invalidPayload("osf_before must be boolean or null", raw);
+  }
+  if (payload.osf_after !== null && typeof payload.osf_after !== "boolean") {
+    return invalidPayload("osf_after must be boolean or null", raw);
+  }
+  if (typeof payload.osf_cleared !== "boolean") return invalidPayload("osf_cleared must be boolean", raw);
+  if (typeof payload.status_message !== "string") return invalidPayload("status_message must be string", raw);
+
+  if (payload.result === "RTC_SYNC_SUCCESS") {
+    if (payload.accepted !== true) return invalidPayload("Successful sync must be accepted", raw);
+    if (payload.write_ok !== true) return invalidPayload("Successful sync must have write_ok=true", raw);
+    if (payload.readback_ok !== true) return invalidPayload("Successful sync must have readback_ok=true", raw);
+    if (!isFiniteNumber(payload.readback_delta_ms)) {
+      return invalidNumeric("Successful sync must include numeric readback_delta_ms", raw);
+    }
+    if (Math.abs(payload.readback_delta_ms) > 2000) {
+      return invalidNumeric("Successful sync readback_delta_ms exceeds tolerance", raw);
+    }
+    if (payload.osf_cleared !== true) return invalidPayload("Successful sync must clear OSF", raw);
+    if (payload.rtc_validity_class_after_sync !== "RTC_VALIDATION_READY") {
+      return invalidPayload("Successful sync must end at RTC_VALIDATION_READY", raw);
+    }
+  }
+
+  return ok(raw);
+}
+
 function validateRtcRawTime(value: unknown): boolean {
   if (!isRecord(value)) return false;
   return (
@@ -554,6 +651,13 @@ function validateRtcDecodedTime(value: unknown): boolean {
 
 function isHexByteString(value: unknown): boolean {
   return typeof value === "string" && /^0x[0-9A-Fa-f]{2}$/.test(value);
+}
+
+function isRtcSyncSessionId(value: unknown): boolean {
+  return (
+    typeof value === "string" &&
+    /^RTC_SYNC_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value)
+  );
 }
 
 function validateAds1115RawChannels(value: unknown): boolean {

@@ -90,6 +90,7 @@ export type EventType =
   | "CHIP_STATUS_TELEMETRY"
   | "POWER_HEALTH_TELEMETRY"
   | "RTC_STATUS_TELEMETRY"
+  | "RTC_SYNC_RESULT_TELEMETRY"
   | "GATEWAY_HEALTH_TELEMETRY"
   | "LINK_HEARTBEAT_TELEMETRY"
   | "LINK_SYNC_TELEMETRY"
@@ -218,6 +219,47 @@ export type RtcStatusPayload = {
   time_source: string;
   sync_source: string | null;
   source_uptime_ms: number;
+  status_message: string;
+};
+
+export type RtcSyncResultValue =
+  | "RTC_SYNC_SUCCESS"
+  | "RTC_SYNC_FAILED"
+  | "REJECTED";
+
+export type RtcSyncValidityClass =
+  | "RTC_NOT_PRESENT"
+  | "RTC_READ_ERROR"
+  | "RTC_PRESENT_TIME_INVALID_OSF"
+  | "RTC_PRESENT_TIME_UNVALIDATED"
+  | "RTC_PRESENT_SESSION_ONLY"
+  | "RTC_PRESENT_TIME_CANDIDATE"
+  | "RTC_VALIDATION_READY";
+
+export type RtcSyncResultPayload = {
+  message_type: "RTC_SYNC_RESULT";
+  protocol_version: 1;
+  request_message_type: "RTC_SESSION_SYNC_REQUEST";
+  session_sync_id: string;
+  accepted: boolean;
+  result: RtcSyncResultValue;
+  reason_code: string | null;
+  reason_detail: string | null;
+  safety_scope: "RTC_ONLY";
+  no_forward_to_sub: true;
+  rtc_write_attempted: boolean;
+  osf_clear_attempted: boolean;
+  forwarded_to_sub: false;
+  control_output_touched: false;
+  source_uptime_ms: number;
+  write_ok: boolean;
+  readback_ok: boolean;
+  readback_delta_ms: number | null;
+  osf_before: boolean | null;
+  osf_after: boolean | null;
+  osf_cleared: boolean;
+  rtc_validity_class_after_sync: RtcSyncValidityClass;
+  timestamp_authority_after_sync: "PI_BACKEND_UTC";
   status_message: string;
 };
 
@@ -364,6 +406,21 @@ export type TelemetryPacket =
       node_id: string;
       event_type: "RTC_STATUS_TELEMETRY";
       payload: RtcStatusPayload;
+    }
+  | {
+      schema_version: string;
+      stream_id: string;
+      global_sequence_number: number;
+      source_node_id: string;
+      source_sequence_number: number;
+      producer_timestamp_utc: string;
+      supervisor_received_utc: string;
+      timestamp_utc: string;
+      sequence_number: number;
+      run_id: string;
+      node_id: string;
+      event_type: "RTC_SYNC_RESULT_TELEMETRY";
+      payload: RtcSyncResultPayload;
     }
   | {
       schema_version: string;
