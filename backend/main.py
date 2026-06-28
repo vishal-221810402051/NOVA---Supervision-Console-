@@ -9,6 +9,8 @@ from gateway_state import GatewayState
 from protocol import (
     build_gateway_health_packet as build_hardware_gateway_health_packet,
 )
+from rtc_sync_ipc import RtcSyncIpcServer
+from rtc_sync_service import send_one_rtc_sync_request
 from serial_bridge import SerialBridge
 from hardware_stream_manager import HardwareStreamManager
 
@@ -41,6 +43,7 @@ hardware_gateway_state = GatewayState(
 hardware_packet_queue: asyncio.Queue[dict] = asyncio.Queue()
 serial_bridge: SerialBridge | None = None
 hardware_stream_manager: HardwareStreamManager | None = None
+rtc_sync_ipc_server: RtcSyncIpcServer | None = None
 
 NODE_IDS = {
     "LAPTOP_CONSOLE": "laptop_console",
@@ -72,7 +75,7 @@ LINK_HEARTBEAT_COUNTERS = {
 
 @app.on_event("startup")
 async def startup():
-    global serial_bridge, hardware_stream_manager
+    global serial_bridge, hardware_stream_manager, rtc_sync_ipc_server
     if BACKEND_MODE != "hardware":
         hardware_gateway_state.set_serial_status(
             serial_connected=False,
@@ -96,9 +99,21 @@ async def startup():
     await hardware_stream_manager.start()
     serial_bridge.start()
 
+    async def send_rtc_sync_once():
+        return await send_one_rtc_sync_request(
+            serial_bridge=serial_bridge,
+            hardware_stream_manager=hardware_stream_manager,
+            backend_mode=BACKEND_MODE,
+        )
+
+    rtc_sync_ipc_server = RtcSyncIpcServer(send_once=send_rtc_sync_once)
+    await rtc_sync_ipc_server.start()
+
 
 @app.on_event("shutdown")
 async def shutdown():
+    if rtc_sync_ipc_server is not None:
+        await rtc_sync_ipc_server.stop()
     if serial_bridge is not None:
         await serial_bridge.stop()
     if hardware_stream_manager is not None:

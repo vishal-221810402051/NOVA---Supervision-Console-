@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
+import json
 import time
 from typing import Any
 
@@ -15,6 +17,15 @@ from protocol import build_integrity_event_packet
 
 STARTUP_GRACE_SECONDS = 2.0
 STARTUP_SETTLE_SECONDS = 0.2
+RTC_SESSION_SYNC_REQUEST = "RTC_SESSION_SYNC_REQUEST"
+
+
+@dataclass(frozen=True)
+class RtcSyncWriteResult:
+    write_attempted: bool
+    write_ok: bool
+    bytes_written: int
+    error: str | None = None
 
 
 class SerialBridge:
@@ -35,6 +46,7 @@ class SerialBridge:
         self._serial = None
         self._startup_fragment_count = 0
         self._boundary_fragment_count = 0
+        self._write_lock = asyncio.Lock()
 
     def start(self) -> None:
         if self._task is None or self._task.done():
@@ -56,6 +68,86 @@ class SerialBridge:
             serial_connected=False,
             hardware_connected=False,
             bridge_status="STOPPED",
+        )
+
+    async def send_rtc_session_sync_frame(self, frame: bytes) -> RtcSyncWriteResult:
+        if not isinstance(frame, bytes):
+            return RtcSyncWriteResult(
+                write_attempted=False,
+                write_ok=False,
+                bytes_written=0,
+                error="RTC sync frame must be bytes",
+            )
+
+        try:
+            payload = json.loads(frame.decode("utf-8").strip())
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            return RtcSyncWriteResult(
+                write_attempted=False,
+                write_ok=False,
+                bytes_written=0,
+                error=f"RTC sync frame is not valid UTF-8 JSON: {exc}",
+            )
+
+        if not isinstance(payload, dict):
+            return RtcSyncWriteResult(
+                write_attempted=False,
+                write_ok=False,
+                bytes_written=0,
+                error="RTC sync frame JSON must be an object",
+            )
+        if payload.get("message_type") != RTC_SESSION_SYNC_REQUEST:
+            return RtcSyncWriteResult(
+                write_attempted=False,
+                write_ok=False,
+                bytes_written=0,
+                error="Only RTC_SESSION_SYNC_REQUEST frames may be written",
+            )
+
+        if self._serial is None:
+            return RtcSyncWriteResult(
+                write_attempted=False,
+                write_ok=False,
+                bytes_written=0,
+                error="Serial bridge is not connected",
+            )
+
+        status = self.state.to_health_status()
+        if not status["serial_connected"]:
+            return RtcSyncWriteResult(
+                write_attempted=False,
+                write_ok=False,
+                bytes_written=0,
+                error="Serial bridge health is not connected",
+            )
+
+        async with self._write_lock:
+            try:
+                bytes_written = await asyncio.to_thread(self._serial.write, frame)
+                await asyncio.to_thread(self._serial.flush)
+            except Exception as exc:
+                return RtcSyncWriteResult(
+                    write_attempted=True,
+                    write_ok=False,
+                    bytes_written=0,
+                    error=f"RTC sync serial write failed: {exc}",
+                )
+
+        if bytes_written != len(frame):
+            return RtcSyncWriteResult(
+                write_attempted=True,
+                write_ok=False,
+                bytes_written=bytes_written,
+                error=(
+                    f"RTC sync partial write: wrote {bytes_written} of "
+                    f"{len(frame)} bytes"
+                ),
+            )
+
+        return RtcSyncWriteResult(
+            write_attempted=True,
+            write_ok=True,
+            bytes_written=bytes_written,
         )
 
     async def _run(self) -> None:
