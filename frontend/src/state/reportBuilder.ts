@@ -9,6 +9,7 @@ import type {
   HealthCheckRule,
   HealthState,
   PowerHealthPayload,
+  RtcDriftEvidence,
   RtcRetentionEvidence,
   RtcSyncResultPayload,
   RtcStatusPayload,
@@ -25,7 +26,11 @@ import {
   type LiveVsReplaySummary,
   type ReplaySnapshot,
 } from "./replayReducer";
-import { deriveRtcRetentionEvidence, deriveRtcValidity } from "./rtcValidity";
+import {
+  deriveRtcDriftEvidence,
+  deriveRtcRetentionEvidence,
+  deriveRtcValidity,
+} from "./rtcValidity";
 
 export type NovaScValidationReport = {
   report_type: "NOVA_SC_SUPERVISORY_VALIDATION_REPORT";
@@ -187,6 +192,7 @@ export type NovaScValidationReport = {
   rtc_retention_summary: RtcRetentionEvidence & {
     tolerance_ms: number;
   };
+  rtc_drift_summary: RtcDriftEvidence;
   expected_warnings: HealthCheckRule[];
   known_limitations: string[];
   disabled_features: string[];
@@ -424,6 +430,10 @@ export function buildNovaScValidationReport(params: {
     rtc_retention_summary: buildRtcRetentionSummary({
       latestRtcStatusPacket: params.latestRtcStatusPacket,
       latestRtcSyncResult: params.latestRtcSyncResult,
+    }),
+    rtc_drift_summary: buildRtcDriftSummary({
+      latestRtcSyncResult: params.latestRtcSyncResult,
+      eventStore: params.eventStore,
     }),
     expected_warnings: healthCheck.rules.filter(
       (rule) =>
@@ -699,6 +709,19 @@ function buildRtcRetentionSummary({
     }),
     tolerance_ms: toleranceMs,
   };
+}
+
+function buildRtcDriftSummary({
+  latestRtcSyncResult,
+  eventStore,
+}: {
+  latestRtcSyncResult: Extract<TelemetryPacket, { event_type: "RTC_SYNC_RESULT_TELEMETRY" }> | null;
+  eventStore: TelemetryEventRecord[];
+}) {
+  return deriveRtcDriftEvidence({
+    latestRtcSyncResult,
+    eventStore,
+  });
 }
 
 export function downloadJsonReport(report: NovaScValidationReport) {

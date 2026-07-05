@@ -290,6 +290,51 @@ export type RtcRetentionEvidence = {
   evidence_note: string;
 };
 
+export type RtcDriftStatus =
+  | "DRIFT_SYNC_RESULT_MISSING"
+  | "DRIFT_SETTLING_AFTER_SYNC"
+  | "DRIFT_BASELINE_PENDING"
+  | "DRIFT_BASELINE_UNSTABLE"
+  | "DRIFT_OBSERVATION_IN_PROGRESS"
+  | "DRIFT_EVIDENCE_READY"
+  | "DRIFT_EXCEEDS_TOLERANCE"
+  | "DRIFT_OSF_REASSERTED"
+  | "DRIFT_TIME_NOT_ADVANCING"
+  | "DRIFT_INSUFFICIENT_EVIDENCE";
+
+export type RtcDriftEvidence = {
+  drift_check_available: boolean;
+  drift_status: RtcDriftStatus;
+  observation_window_target_seconds: number;
+  observation_elapsed_seconds: number | null;
+  sample_count: number;
+  baseline_min_settle_seconds: number;
+  baseline_candidate_count: number;
+  baseline_rejected_count: number;
+  baseline_rejection_reason: string | null;
+  baseline_source: string | null;
+  baseline_rtc_time_utc: string | null;
+  baseline_pi_utc: string | null;
+  baseline_rtc_pi_delta_ms: number | null;
+  baseline_delta_vs_sync_readback_ms: number | null;
+  sync_readback_delta_ms: number | null;
+  baseline_selected_after_sync_seconds: number | null;
+  current_rtc_time_utc: string | null;
+  current_pi_utc: string | null;
+  current_rtc_pi_delta_ms: number | null;
+  drift_ms: number | null;
+  drift_abs_ms: number | null;
+  drift_rate_ms_per_hour: number | null;
+  drift_rate_ppm: number | null;
+  oscillator_stop_flag: boolean | null;
+  rtc_time_advanced: boolean | null;
+  timestamp_authority: "PI_BACKEND_UTC";
+  rtc_validated: false;
+  required_next_action: string;
+  evidence_note: string;
+  tolerance_ms: number;
+};
+
 export type GatewayHealthPayload = {
   node_id: "pi_gateway";
   health_state: HealthState;

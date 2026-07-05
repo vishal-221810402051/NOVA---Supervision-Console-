@@ -1,16 +1,25 @@
 import { useTelemetryStore } from "../store/telemetryStore";
 import type { RtcDecodedTime } from "../types/telemetry";
-import { deriveRtcRetentionEvidence, deriveRtcValidity } from "../state/rtcValidity";
+import {
+  deriveRtcDriftEvidence,
+  deriveRtcRetentionEvidence,
+  deriveRtcValidity,
+} from "../state/rtcValidity";
 
 export function RtcStatus() {
   const rtc = useTelemetryStore((state) => state.rtcStatus);
   const latestRtcStatusPacket = useTelemetryStore((state) => state.latestRtcStatusPacket);
   const latestRtcSyncResult = useTelemetryStore((state) => state.latestRtcSyncResult);
+  const eventStore = useTelemetryStore((state) => state.eventStore);
   const isTelemetryStale = useTelemetryStore((state) => state.isTelemetryStale);
   const validity = deriveRtcValidity(rtc);
   const retention = deriveRtcRetentionEvidence({
     latestRtcStatusPacket,
     latestRtcSyncResult,
+  });
+  const drift = deriveRtcDriftEvidence({
+    latestRtcSyncResult,
+    eventStore,
   });
   const syncPayload = latestRtcSyncResult?.payload ?? null;
 
@@ -97,6 +106,48 @@ export function RtcStatus() {
           <Metric label="Evidence Note" value={retention.evidence_note} />
         </div>
       </section>
+      <section className="mb-4 border border-fuchsia-500/40 bg-fuchsia-950/10 p-3">
+        <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-fuchsia-300">
+          Phase 7.2G RTC Drift Evidence
+        </h3>
+        <div className="mb-3 space-y-1 text-xs uppercase tracking-widest text-slate-400">
+          <div>{getDriftMissingReason(drift.drift_status)}</div>
+          <div>Pi/backend UTC remains timestamp authority.</div>
+          <div>RTC_VALIDATED is not assigned in Phase 7.2G.</div>
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <Metric label="Drift Status" value={drift.drift_status} />
+          <Metric label="Check Available" value={formatBoolean(drift.drift_check_available)} />
+          <Metric label="Observation Target" value={`${drift.observation_window_target_seconds} s`} />
+          <Metric label="Observation Elapsed" value={formatNullableNumber(drift.observation_elapsed_seconds, " s")} />
+          <Metric label="Sample Count" value={`${drift.sample_count}`} />
+          <Metric label="Baseline Min Settle" value={`${drift.baseline_min_settle_seconds} s`} />
+          <Metric label="Baseline Selected After Sync" value={formatNullableNumber(drift.baseline_selected_after_sync_seconds, " s")} />
+          <Metric label="Sync Readback Delta" value={formatNullableNumber(drift.sync_readback_delta_ms, " ms")} />
+          <Metric label="Baseline Delta vs Readback" value={formatNullableNumber(drift.baseline_delta_vs_sync_readback_ms, " ms")} />
+          <Metric label="Baseline Candidate Count" value={`${drift.baseline_candidate_count}`} />
+          <Metric label="Baseline Rejected Count" value={`${drift.baseline_rejected_count}`} />
+          <Metric label="Baseline Rejection Reason" value={drift.baseline_rejection_reason ?? "NONE"} />
+          <Metric label="Baseline Source" value={drift.baseline_source ?? "UNKNOWN"} />
+          <Metric label="Baseline RTC UTC" value={drift.baseline_rtc_time_utc ?? "UNKNOWN"} />
+          <Metric label="Baseline Pi/Backend UTC" value={drift.baseline_pi_utc ?? "UNKNOWN"} />
+          <Metric label="Baseline RTC/Pi Delta" value={formatNullableNumber(drift.baseline_rtc_pi_delta_ms, " ms")} />
+          <Metric label="Current RTC UTC" value={drift.current_rtc_time_utc ?? "UNKNOWN"} />
+          <Metric label="Current Pi/Backend UTC" value={drift.current_pi_utc ?? "UNKNOWN"} />
+          <Metric label="Current RTC/Pi Delta" value={formatNullableNumber(drift.current_rtc_pi_delta_ms, " ms")} />
+          <Metric label="Drift" value={formatNullableNumber(drift.drift_ms, " ms")} />
+          <Metric label="Absolute Drift" value={formatNullableNumber(drift.drift_abs_ms, " ms")} />
+          <Metric label="Drift Rate" value={formatNullableNumber(drift.drift_rate_ms_per_hour, " ms/hour")} />
+          <Metric label="Drift Rate PPM" value={formatNullableNumber(drift.drift_rate_ppm, " ppm")} />
+          <Metric label="Tolerance" value={`${drift.tolerance_ms} ms`} />
+          <Metric label="OSF" value={formatNullableBoolean(drift.oscillator_stop_flag)} />
+          <Metric label="RTC Time Advanced" value={formatNullableBoolean(drift.rtc_time_advanced)} />
+          <Metric label="Timestamp Authority" value={drift.timestamp_authority} />
+          <Metric label="RTC Validated" value={formatBoolean(drift.rtc_validated)} />
+          <Metric label="Required Next Action" value={drift.required_next_action} />
+          <Metric label="Evidence Note" value={drift.evidence_note} />
+        </div>
+      </section>
       {isTelemetryStale && (
         <div className="mb-4 text-xs uppercase tracking-widest text-amber-300">
           Telemetry is stale; values are last known state.
@@ -140,6 +191,33 @@ function formatRtcTime(time: RtcDecodedTime | null) {
   if (!time) return "UNAVAILABLE";
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${time.year}-${pad(time.month)}-${pad(time.date)} ${pad(time.hour)}:${pad(time.minute)}:${pad(time.second)}`;
+}
+
+function getDriftMissingReason(status: string) {
+  switch (status) {
+    case "DRIFT_SYNC_RESULT_MISSING":
+      return "Missing reason: RTC_SYNC_SUCCESS has not been captured in this frontend session.";
+    case "DRIFT_SETTLING_AFTER_SYNC":
+      return "Missing reason: waiting for the 30-second post-sync baseline settle window.";
+    case "DRIFT_BASELINE_PENDING":
+      return "Missing reason: hardened baseline is selected; waiting for another valid RTC_STATUS_TELEMETRY sample.";
+    case "DRIFT_BASELINE_UNSTABLE":
+      return "Missing reason: no stable baseline passed the 30-second settle and sync-readback consistency gates.";
+    case "DRIFT_OBSERVATION_IN_PROGRESS":
+      return "Missing reason: the 30-minute drift observation window is still in progress.";
+    case "DRIFT_OSF_REASSERTED":
+      return "Missing reason: DS3231 oscillator stop flag reasserted during drift observation.";
+    case "DRIFT_TIME_NOT_ADVANCING":
+      return "Missing reason: DS3231 time did not advance after the baseline sample.";
+    case "DRIFT_EXCEEDS_TOLERANCE":
+      return "Missing reason: DS3231 short-window drift exceeded tolerance.";
+    case "DRIFT_INSUFFICIENT_EVIDENCE":
+      return "Missing reason: drift comparison does not have valid timestamp evidence.";
+    case "DRIFT_EVIDENCE_READY":
+      return "Drift evidence is ready for Phase 7.2G report export.";
+    default:
+      return "Missing reason: drift evidence status is unknown.";
+  }
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
