@@ -9,6 +9,7 @@ import type {
   HealthCheckRule,
   HealthState,
   PowerHealthPayload,
+  RtcRetentionEvidence,
   RtcSyncResultPayload,
   RtcStatusPayload,
   TelemetryPacket,
@@ -24,7 +25,7 @@ import {
   type LiveVsReplaySummary,
   type ReplaySnapshot,
 } from "./replayReducer";
-import { deriveRtcValidity } from "./rtcValidity";
+import { deriveRtcRetentionEvidence, deriveRtcValidity } from "./rtcValidity";
 
 export type NovaScValidationReport = {
   report_type: "NOVA_SC_SUPERVISORY_VALIDATION_REPORT";
@@ -183,6 +184,9 @@ export type NovaScValidationReport = {
   power_health_summary: Record<string, unknown>;
   rtc_status_summary: Record<string, unknown> | null;
   rtc_sync_summary: Record<string, unknown>;
+  rtc_retention_summary: RtcRetentionEvidence & {
+    tolerance_ms: number;
+  };
   expected_warnings: HealthCheckRule[];
   known_limitations: string[];
   disabled_features: string[];
@@ -207,6 +211,7 @@ export function buildNovaScValidationReport(params: {
   gatewayHealth: GatewayHealthPayload | null;
   powerHealth: PowerHealthPayload | null;
   rtcStatus: RtcStatusPayload | null;
+  latestRtcStatusPacket: Extract<TelemetryPacket, { event_type: "RTC_STATUS_TELEMETRY" }> | null;
   latestRtcSyncResult: Extract<TelemetryPacket, { event_type: "RTC_SYNC_RESULT_TELEMETRY" }> | null;
   activeTelemetrySource: TelemetrySourceStatus;
   globalHealth: HealthState;
@@ -416,6 +421,10 @@ export function buildNovaScValidationReport(params: {
     ),
     rtc_status_summary: buildRtcStatusSummary(params.rtcStatus),
     rtc_sync_summary: buildRtcSyncSummary(params.latestRtcSyncResult),
+    rtc_retention_summary: buildRtcRetentionSummary({
+      latestRtcStatusPacket: params.latestRtcStatusPacket,
+      latestRtcSyncResult: params.latestRtcSyncResult,
+    }),
     expected_warnings: healthCheck.rules.filter(
       (rule) =>
         rule.category === "EXPECTED_WARNING" || rule.rule_id.includes("FRAM")
@@ -671,6 +680,24 @@ function buildRtcSyncSummary(
     status_message: payload.status_message,
     evidence_note:
       "RTC synchronization succeeded and DS3231 reached RTC_VALIDATION_READY, but Pi/backend UTC remains timestamp authority. RTC_VALIDATED requires retention/drift validation in a later phase.",
+  };
+}
+
+function buildRtcRetentionSummary({
+  latestRtcStatusPacket,
+  latestRtcSyncResult,
+}: {
+  latestRtcStatusPacket: Extract<TelemetryPacket, { event_type: "RTC_STATUS_TELEMETRY" }> | null;
+  latestRtcSyncResult: Extract<TelemetryPacket, { event_type: "RTC_SYNC_RESULT_TELEMETRY" }> | null;
+}) {
+  const toleranceMs = 5000;
+  return {
+    ...deriveRtcRetentionEvidence({
+      latestRtcStatusPacket,
+      latestRtcSyncResult,
+      toleranceMs,
+    }),
+    tolerance_ms: toleranceMs,
   };
 }
 

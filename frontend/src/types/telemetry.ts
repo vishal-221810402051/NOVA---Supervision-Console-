@@ -263,6 +263,33 @@ export type RtcSyncResultPayload = {
   status_message: string;
 };
 
+export type RtcRetentionStatus =
+  | "RETENTION_NOT_CHECKED"
+  | "RETENTION_CHECK_PENDING"
+  | "RETENTION_EVIDENCE_READY"
+  | "RETENTION_OSF_REASSERTED"
+  | "RETENTION_TIME_NOT_ADVANCING"
+  | "RETENTION_DELTA_TOO_LARGE"
+  | "RETENTION_INSUFFICIENT_EVIDENCE";
+
+export type RtcRetentionEvidence = {
+  retention_check_available: boolean;
+  retention_status: RtcRetentionStatus;
+  last_sync_session_id: string | null;
+  last_sync_result_utc: string | null;
+  current_rtc_time_utc: string | null;
+  current_pi_utc: string | null;
+  rtc_pi_delta_ms: number | null;
+  oscillator_stop_flag: boolean | null;
+  backup_battery_present: boolean | null;
+  backup_battery_configured: boolean | null;
+  rtc_time_advanced_since_sync: boolean | null;
+  timestamp_authority: "PI_BACKEND_UTC";
+  rtc_validated: false;
+  required_next_action: string;
+  evidence_note: string;
+};
+
 export type GatewayHealthPayload = {
   node_id: "pi_gateway";
   health_state: HealthState;

@@ -1,12 +1,17 @@
 import { useTelemetryStore } from "../store/telemetryStore";
 import type { RtcDecodedTime } from "../types/telemetry";
-import { deriveRtcValidity } from "../state/rtcValidity";
+import { deriveRtcRetentionEvidence, deriveRtcValidity } from "../state/rtcValidity";
 
 export function RtcStatus() {
   const rtc = useTelemetryStore((state) => state.rtcStatus);
+  const latestRtcStatusPacket = useTelemetryStore((state) => state.latestRtcStatusPacket);
   const latestRtcSyncResult = useTelemetryStore((state) => state.latestRtcSyncResult);
   const isTelemetryStale = useTelemetryStore((state) => state.isTelemetryStale);
   const validity = deriveRtcValidity(rtc);
+  const retention = deriveRtcRetentionEvidence({
+    latestRtcStatusPacket,
+    latestRtcSyncResult,
+  });
   const syncPayload = latestRtcSyncResult?.payload ?? null;
 
   return (
@@ -64,6 +69,33 @@ export function RtcStatus() {
             <Metric label="Status Message" value={syncPayload.status_message} />
           </div>
         )}
+      </section>
+      <section className="mb-4 border border-emerald-500/40 bg-emerald-950/10 p-3">
+        <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-emerald-300">
+          Phase 7.2F RTC Retention Evidence
+        </h3>
+        <div className="mb-3 space-y-1 text-xs uppercase tracking-widest text-slate-400">
+          <div>Pi/backend UTC remains timestamp authority.</div>
+          <div>RTC_VALIDATED is not assigned in Phase 7.2F.</div>
+          <div>Retention evidence does not enable command/control or actuation.</div>
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <Metric label="Retention Status" value={retention.retention_status} />
+          <Metric label="Check Available" value={formatBoolean(retention.retention_check_available)} />
+          <Metric label="Last Sync Session ID" value={retention.last_sync_session_id ?? "NONE"} />
+          <Metric label="Last Sync Result UTC" value={retention.last_sync_result_utc ?? "UNKNOWN"} />
+          <Metric label="Current RTC UTC" value={retention.current_rtc_time_utc ?? "UNKNOWN"} />
+          <Metric label="Current Pi/Backend UTC" value={retention.current_pi_utc ?? "UNKNOWN"} />
+          <Metric label="RTC/Pi Delta" value={formatNullableNumber(retention.rtc_pi_delta_ms, " ms")} />
+          <Metric label="Current OSF" value={formatNullableBoolean(retention.oscillator_stop_flag)} />
+          <Metric label="Battery Present" value={formatNullableBoolean(retention.backup_battery_present)} />
+          <Metric label="Battery Configured" value={formatNullableBoolean(retention.backup_battery_configured)} />
+          <Metric label="Time Advanced Since Sync" value={formatNullableBoolean(retention.rtc_time_advanced_since_sync)} />
+          <Metric label="Timestamp Authority" value={retention.timestamp_authority} />
+          <Metric label="RTC Validated" value={formatBoolean(retention.rtc_validated)} />
+          <Metric label="Required Next Action" value={retention.required_next_action} />
+          <Metric label="Evidence Note" value={retention.evidence_note} />
+        </div>
       </section>
       {isTelemetryStale && (
         <div className="mb-4 text-xs uppercase tracking-widest text-amber-300">
