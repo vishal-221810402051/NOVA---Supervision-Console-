@@ -1,4 +1,5 @@
 import type {
+  RtcDriftBaseline,
   RtcDriftEvidence,
   RtcDriftStatus,
   RtcRetentionEvidence,
@@ -59,6 +60,8 @@ const DEFAULT_AUTHORITY = {
 
 export const PHASE_7_2G_DRIFT_TARGET_SECONDS = 1800;
 export const PHASE_7_2G_DRIFT_TOLERANCE_MS = 3000;
+export const PHASE_7_2G_ONE_HOUR_DRIFT_TARGET_SECONDS = 3600;
+export const PHASE_7_2G_ONE_HOUR_DRIFT_TOLERANCE_MS = 3000;
 export const PHASE_7_2G_BASELINE_MIN_SETTLE_SECONDS = 30;
 export const PHASE_7_2G_BASELINE_READBACK_TOLERANCE_MS = 3000;
 
@@ -174,12 +177,20 @@ export function deriveRtcDriftEvidence({
   latestRtcSyncResult,
   eventStore = [],
   rtcStatusPackets,
-  observationWindowTargetSeconds = PHASE_7_2G_DRIFT_TARGET_SECONDS,
-  toleranceMs = PHASE_7_2G_DRIFT_TOLERANCE_MS,
+  storedBaseline = null,
+  rawEventStoreCapacity = null,
+  rawEventStoreCurrentEvents = null,
+  rawEventStoreDroppedOldEvents = null,
+  observationWindowTargetSeconds = PHASE_7_2G_ONE_HOUR_DRIFT_TARGET_SECONDS,
+  toleranceMs = PHASE_7_2G_ONE_HOUR_DRIFT_TOLERANCE_MS,
 }: {
   latestRtcSyncResult: RtcSyncResultPacket | null;
   eventStore?: TelemetryEventRecord[];
   rtcStatusPackets?: RtcStatusPacket[];
+  storedBaseline?: RtcDriftBaseline | null;
+  rawEventStoreCapacity?: number | null;
+  rawEventStoreCurrentEvents?: number | null;
+  rawEventStoreDroppedOldEvents?: number | null;
   observationWindowTargetSeconds?: number;
   toleranceMs?: number;
 }): RtcDriftEvidence {
@@ -200,6 +211,9 @@ export function deriveRtcDriftEvidence({
       ),
       observationWindowTargetSeconds,
       toleranceMs,
+      raw_event_store_capacity: rawEventStoreCapacity,
+      raw_event_store_current_events: rawEventStoreCurrentEvents,
+      raw_event_store_dropped_old_events: rawEventStoreDroppedOldEvents,
     });
   }
 
@@ -222,6 +236,9 @@ export function deriveRtcDriftEvidence({
       observationWindowTargetSeconds,
       toleranceMs,
       sync_readback_delta_ms: syncReadbackDeltaMs,
+      raw_event_store_capacity: rawEventStoreCapacity,
+      raw_event_store_current_events: rawEventStoreCurrentEvents,
+      raw_event_store_dropped_old_events: rawEventStoreDroppedOldEvents,
     });
   }
 
@@ -233,54 +250,77 @@ export function deriveRtcDriftEvidence({
     rtcStatusPackets,
   });
 
+  const matchingStoredBaseline =
+    storedBaseline && storedBaseline.sync_session_id === latestSyncPayload.session_sync_id
+      ? storedBaseline
+      : null;
+  const baseline =
+    matchingStoredBaseline
+      ? storedBaselineToSample(matchingStoredBaseline)
+      : selection.baseline;
+  const baselineSource =
+    matchingStoredBaseline?.baseline_source ??
+    (baseline ? buildBaselineSource(baseline.packet) : null);
   const baselineDiagnostics = {
     baseline_candidate_count: selection.candidateCount,
     baseline_rejected_count: selection.rejectedCount,
     baseline_rejection_reason: selection.rejectionReason,
-    baseline_selected_after_sync_seconds: selection.selectedAfterSyncSeconds,
-    baseline_delta_vs_sync_readback_ms: selection.deltaVsSyncReadbackMs,
+    baseline_selected_after_sync_seconds:
+      matchingStoredBaseline?.baseline_selected_after_sync_seconds ??
+      selection.selectedAfterSyncSeconds,
+    baseline_delta_vs_sync_readback_ms:
+      matchingStoredBaseline?.baseline_delta_vs_sync_readback_ms ??
+      selection.deltaVsSyncReadbackMs,
     sync_readback_delta_ms: syncReadbackDeltaMs,
+    baseline_persisted_in_session: matchingStoredBaseline !== null,
+    raw_event_store_capacity: rawEventStoreCapacity,
+    raw_event_store_current_events: rawEventStoreCurrentEvents,
+    raw_event_store_dropped_old_events: rawEventStoreDroppedOldEvents,
   };
 
-  if (!selection.hasPostSyncEvidencePastSettle) {
+  if (!baseline && !selection.hasPostSyncEvidencePastSettle) {
     return driftEvidence({
       drift_check_available: false,
       drift_status: "DRIFT_SETTLING_AFTER_SYNC",
       sample_count: selection.candidateCount,
       ...baselineDiagnostics,
-      required_next_action: "WAIT_FOR_30S_BASELINE_SETTLE",
+      required_next_action: "WAIT_FOR_HARDENED_DRIFT_BASELINE",
       evidence_note: buildDriftEvidenceNote(
-        "Phase 7.2G-A drift evidence is waiting for the 30-second post-sync baseline settle window."
+        "Phase 7.2G-B 1-hour drift evidence is waiting for the 30-second post-sync baseline settle window."
       ),
       observationWindowTargetSeconds,
       toleranceMs,
     });
   }
 
-  if (!selection.baseline) {
+  if (!baseline) {
     return driftEvidence({
       drift_check_available: false,
       drift_status: "DRIFT_BASELINE_UNSTABLE",
       sample_count: selection.candidateCount,
       ...baselineDiagnostics,
-      required_next_action: "INVESTIGATE_RTC_BASELINE_STABILITY",
+      required_next_action: "INVESTIGATE_RTC_DRIFT_BASELINE",
       evidence_note: buildDriftEvidenceNote(
-        "Phase 7.2G-A drift evidence found post-settle RTC_STATUS candidates, but no stable baseline passed the hardening gates."
+        "Phase 7.2G-B 1-hour drift evidence found post-settle RTC_STATUS candidates, but no stable baseline passed the hardening gates."
       ),
       observationWindowTargetSeconds,
       toleranceMs,
     });
   }
 
-  const baseline = selection.baseline;
-  const samples = [baseline, ...selection.samplesAfterBaseline];
+  const samplesAfterBaseline = selectCurrentSamplesAfterBaseline({
+    baseline,
+    eventStore,
+    rtcStatusPackets,
+  });
+  const samples = [baseline, ...samplesAfterBaseline];
 
   if (samples.length < 2) {
     return driftEvidence({
       drift_check_available: false,
       drift_status: "DRIFT_BASELINE_PENDING",
       sample_count: samples.length,
-      baseline_source: buildBaselineSource(baseline.packet),
+      baseline_source: baselineSource,
       baseline_rtc_time_utc: baseline.rtcUtc,
       baseline_pi_utc: baseline.piUtc,
       baseline_rtc_pi_delta_ms: baseline.rtcMs - baseline.piMs,
@@ -289,7 +329,7 @@ export function deriveRtcDriftEvidence({
       ...baselineDiagnostics,
       required_next_action: "WAIT_FOR_RTC_STATUS_AFTER_BASELINE",
       evidence_note: buildDriftEvidenceNote(
-        "Phase 7.2G-A drift evidence selected a hardened baseline and is waiting for another valid RTC_STATUS sample after baseline."
+        "Phase 7.2G-B 1-hour drift evidence selected a hardened baseline and is waiting for another valid RTC_STATUS sample after baseline."
       ),
       observationWindowTargetSeconds,
       toleranceMs,
@@ -315,7 +355,7 @@ export function deriveRtcDriftEvidence({
     drift_check_available: true,
     sample_count: samples.length,
     observation_elapsed_seconds: observationElapsedSeconds,
-    baseline_source: buildBaselineSource(baseline.packet),
+    baseline_source: baselineSource,
     baseline_rtc_time_utc: baseline.rtcUtc,
     baseline_pi_utc: baseline.piUtc,
     baseline_rtc_pi_delta_ms: baselineDeltaMs,
@@ -339,7 +379,7 @@ export function deriveRtcDriftEvidence({
       drift_status: "DRIFT_OSF_REASSERTED",
       required_next_action: "INVESTIGATE_RTC_OSF",
       evidence_note: buildDriftEvidenceNote(
-        "Phase 7.2G-A drift evidence observed DS3231 OSF reassertion, so drift evidence is not accepted."
+        "Phase 7.2G-B 1-hour drift evidence observed DS3231 OSF reassertion, so drift evidence is not accepted."
       ),
     });
   }
@@ -350,7 +390,7 @@ export function deriveRtcDriftEvidence({
       drift_status: "DRIFT_TIME_NOT_ADVANCING",
       required_next_action: "INVESTIGATE_RTC_TIME_ADVANCE",
       evidence_note: buildDriftEvidenceNote(
-        "Phase 7.2G-A drift evidence shows RTC time did not advance after the hardened baseline sample."
+        "Phase 7.2G-B 1-hour drift evidence shows RTC time did not advance after the hardened baseline sample."
       ),
     });
   }
@@ -359,9 +399,9 @@ export function deriveRtcDriftEvidence({
     return driftEvidence({
       ...common,
       drift_status: "DRIFT_OBSERVATION_IN_PROGRESS",
-      required_next_action: "CONTINUE_30_MIN_DRIFT_OBSERVATION",
+      required_next_action: "CONTINUE_1_HOUR_DRIFT_OBSERVATION",
       evidence_note: buildDriftEvidenceNote(
-        "Phase 7.2G-A drift evidence is collecting the 30-minute observation window from a hardened baseline."
+        "Phase 7.2G-B drift evidence is collecting the 1-hour observation window from a session-stored hardened baseline."
       ),
     });
   }
@@ -372,7 +412,7 @@ export function deriveRtcDriftEvidence({
       drift_status: "DRIFT_EXCEEDS_TOLERANCE",
       required_next_action: "INVESTIGATE_RTC_DRIFT",
       evidence_note: buildDriftEvidenceNote(
-        "Phase 7.2G-A drift evidence exceeded the configured drift tolerance after hardened baseline selection."
+        "Phase 7.2G-B 1-hour drift evidence exceeded the configured drift tolerance after hardened baseline selection."
       ),
     });
   }
@@ -380,11 +420,63 @@ export function deriveRtcDriftEvidence({
   return driftEvidence({
     ...common,
     drift_status: "DRIFT_EVIDENCE_READY",
-    required_next_action: "PROCEED_TO_LONGER_DRIFT_VALIDATION",
+    required_next_action: "COMPLETE_1_HOUR_RTC_DRIFT_VALIDATION_REVIEW",
     evidence_note: buildDriftEvidenceNote(
-      "Phase 7.2G-A drift evidence is ready within the configured tolerance after hardened baseline selection."
+      "Phase 7.2G-B 1-hour drift evidence is ready within the configured tolerance after hardened baseline selection."
     ),
   });
+}
+
+export function deriveRtcDriftBaselineForSession({
+  latestRtcSyncResult,
+  eventStore,
+}: {
+  latestRtcSyncResult: RtcSyncResultPacket | null;
+  eventStore: TelemetryEventRecord[];
+}): RtcDriftBaseline | null {
+  const latestSyncPayload = latestRtcSyncResult?.payload ?? null;
+  if (
+    !latestRtcSyncResult ||
+    !latestSyncPayload ||
+    latestSyncPayload.result !== "RTC_SYNC_SUCCESS" ||
+    latestSyncPayload.accepted !== true
+  ) {
+    return null;
+  }
+  const syncUtc = getPacketTimestampUtc(latestRtcSyncResult);
+  const syncMs = syncUtc ? Date.parse(syncUtc) : NaN;
+  if (!syncUtc || !Number.isFinite(syncMs)) return null;
+
+  const syncReadbackDeltaMs =
+    typeof latestSyncPayload.readback_delta_ms === "number" &&
+    Number.isFinite(latestSyncPayload.readback_delta_ms)
+      ? latestSyncPayload.readback_delta_ms
+      : null;
+  const selection = selectDriftBaseline({
+    syncPacket: latestRtcSyncResult,
+    syncMs,
+    syncReadbackDeltaMs,
+    eventStore,
+  });
+  if (!selection.baseline) return null;
+
+  const baselineDeltaMs = selection.baseline.rtcMs - selection.baseline.piMs;
+  return {
+    baseline_source: buildBaselineSource(selection.baseline.packet),
+    baseline_rtc_time_utc: selection.baseline.rtcUtc,
+    baseline_pi_utc: selection.baseline.piUtc,
+    baseline_rtc_pi_delta_ms: baselineDeltaMs,
+    baseline_selected_after_sync_seconds:
+      selection.selectedAfterSyncSeconds ?? 0,
+    baseline_delta_vs_sync_readback_ms: selection.deltaVsSyncReadbackMs,
+    sync_readback_delta_ms: syncReadbackDeltaMs,
+    sync_session_id: latestSyncPayload.session_sync_id,
+    sync_timestamp_utc: syncUtc,
+    stream_id: selection.baseline.packet.stream_id,
+    source_node_id: selection.baseline.packet.source_node_id,
+    baseline_min_settle_seconds: PHASE_7_2G_BASELINE_MIN_SETTLE_SECONDS,
+    created_at_report_only_utc: new Date().toISOString(),
+  };
 }
 
 export function deriveRtcRetentionEvidence({
@@ -657,6 +749,71 @@ function selectDriftBaseline({
   };
 }
 
+function selectCurrentSamplesAfterBaseline({
+  baseline,
+  eventStore,
+  rtcStatusPackets,
+}: {
+  baseline: ValidDriftSample;
+  eventStore: TelemetryEventRecord[];
+  rtcStatusPackets?: RtcStatusPacket[];
+}): ValidDriftSample[] {
+  const packets = rtcStatusPackets ?? extractRtcStatusPackets(eventStore);
+  return packets
+    .map(toValidDriftSample)
+    .filter((sample): sample is ValidDriftSample => {
+      if (sample === null) return false;
+      return (
+        sample.piMs > baseline.piMs &&
+        sample.packet.stream_id === baseline.packet.stream_id &&
+        sample.packet.source_node_id === "esp32_main"
+      );
+    })
+    .sort((a, b) => a.piMs - b.piMs);
+}
+
+function storedBaselineToSample(baseline: RtcDriftBaseline): ValidDriftSample {
+  return {
+    packet: {
+      schema_version: "v1.0",
+      stream_id: baseline.stream_id,
+      global_sequence_number: 0,
+      source_node_id: baseline.source_node_id,
+      source_sequence_number: 0,
+      producer_timestamp_utc: baseline.baseline_pi_utc,
+      supervisor_received_utc: baseline.baseline_pi_utc,
+      timestamp_utc: baseline.baseline_pi_utc,
+      sequence_number: 0,
+      run_id: "NOVA_SC_PHASE_6_1",
+      node_id: baseline.source_node_id,
+      event_type: "RTC_STATUS_TELEMETRY",
+      payload: {
+        rtc_device: "DS3231",
+        rtc_address: "0x68",
+        rtc_detected: true,
+        rtc_register_read_ok: true,
+        rtc_time_raw: null,
+        rtc_time: null,
+        rtc_time_utc: null,
+        rtc_time_valid: false,
+        rtc_status: "RTC_TIME_VALIDATION_PENDING",
+        oscillator_stop_flag: false,
+        backup_battery_present: true,
+        backup_battery_configured: true,
+        time_source: "DS3231_UNVERIFIED",
+        sync_source: null,
+        source_uptime_ms: 0,
+        status_message:
+          "Session-stored Phase 7.2G-B drift baseline; not timestamp authority",
+      },
+    },
+    piUtc: baseline.baseline_pi_utc,
+    piMs: Date.parse(baseline.baseline_pi_utc),
+    rtcUtc: baseline.baseline_rtc_time_utc,
+    rtcMs: Date.parse(baseline.baseline_rtc_time_utc),
+  };
+}
+
 function extractRtcStatusPackets(
   eventStore: TelemetryEventRecord[]
 ): RtcStatusPacket[] {
@@ -714,9 +871,14 @@ function driftEvidence(
     observation_window_target_seconds:
       input.observationWindowTargetSeconds ??
       input.observation_window_target_seconds ??
-      PHASE_7_2G_DRIFT_TARGET_SECONDS,
+      PHASE_7_2G_ONE_HOUR_DRIFT_TARGET_SECONDS,
     observation_elapsed_seconds: input.observation_elapsed_seconds ?? null,
     sample_count: input.sample_count ?? 0,
+    baseline_persisted_in_session: input.baseline_persisted_in_session ?? false,
+    raw_event_store_capacity: input.raw_event_store_capacity ?? null,
+    raw_event_store_current_events: input.raw_event_store_current_events ?? null,
+    raw_event_store_dropped_old_events:
+      input.raw_event_store_dropped_old_events ?? null,
     baseline_min_settle_seconds:
       input.baseline_min_settle_seconds ??
       PHASE_7_2G_BASELINE_MIN_SETTLE_SECONDS,
@@ -746,7 +908,9 @@ function driftEvidence(
     required_next_action: input.required_next_action,
     evidence_note: input.evidence_note,
     tolerance_ms:
-      input.toleranceMs ?? input.tolerance_ms ?? PHASE_7_2G_DRIFT_TOLERANCE_MS,
+      input.toleranceMs ??
+      input.tolerance_ms ??
+      PHASE_7_2G_ONE_HOUR_DRIFT_TOLERANCE_MS,
   };
 }
 
@@ -838,7 +1002,7 @@ function roundNullable(value: number | null, digits: number) {
 }
 
 function buildDriftEvidenceNote(summary: string) {
-  return `${summary} Phase 7.2G-A uses a hardened 30-second post-sync baseline settle rule. Baseline is rejected if inconsistent with sync readback by more than ${PHASE_7_2G_BASELINE_READBACK_TOLERANCE_MS} ms. Pi/backend UTC remains timestamp authority; rtc_validated remains false; RTC_VALIDATED is not assigned.`;
+  return `${summary} Phase 7.2G-B uses a hardened 30-second post-sync baseline settle rule and a session-stored baseline to survive event-store rollover during the 1-hour run. Baseline is rejected if inconsistent with sync readback by more than ${PHASE_7_2G_BASELINE_READBACK_TOLERANCE_MS} ms. Pi/backend UTC remains timestamp authority; rtc_validated remains false; RTC_VALIDATED is not assigned.`;
 }
 
 function evidence(

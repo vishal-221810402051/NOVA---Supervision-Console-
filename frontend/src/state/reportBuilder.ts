@@ -9,6 +9,7 @@ import type {
   HealthCheckRule,
   HealthState,
   PowerHealthPayload,
+  RtcDriftBaseline,
   RtcDriftEvidence,
   RtcRetentionEvidence,
   RtcSyncResultPayload,
@@ -219,6 +220,7 @@ export function buildNovaScValidationReport(params: {
   rtcStatus: RtcStatusPayload | null;
   latestRtcStatusPacket: Extract<TelemetryPacket, { event_type: "RTC_STATUS_TELEMETRY" }> | null;
   latestRtcSyncResult: Extract<TelemetryPacket, { event_type: "RTC_SYNC_RESULT_TELEMETRY" }> | null;
+  rtcDriftBaseline: RtcDriftBaseline | null;
   activeTelemetrySource: TelemetrySourceStatus;
   globalHealth: HealthState;
   connectionState: ConnectionState;
@@ -433,7 +435,11 @@ export function buildNovaScValidationReport(params: {
     }),
     rtc_drift_summary: buildRtcDriftSummary({
       latestRtcSyncResult: params.latestRtcSyncResult,
+      rtcDriftBaseline: params.rtcDriftBaseline,
       eventStore: params.eventStore,
+      eventStoreMaxEvents: params.eventStoreMaxEvents,
+      eventStoreSummary: params.eventStoreSummary,
+      eventStoreDroppedOldEvents: params.eventStoreDroppedOldEvents,
     }),
     expected_warnings: healthCheck.rules.filter(
       (rule) =>
@@ -713,14 +719,26 @@ function buildRtcRetentionSummary({
 
 function buildRtcDriftSummary({
   latestRtcSyncResult,
+  rtcDriftBaseline,
   eventStore,
+  eventStoreMaxEvents,
+  eventStoreSummary,
+  eventStoreDroppedOldEvents,
 }: {
   latestRtcSyncResult: Extract<TelemetryPacket, { event_type: "RTC_SYNC_RESULT_TELEMETRY" }> | null;
+  rtcDriftBaseline: RtcDriftBaseline | null;
   eventStore: TelemetryEventRecord[];
+  eventStoreMaxEvents: number;
+  eventStoreSummary: EventStoreSummary;
+  eventStoreDroppedOldEvents: number;
 }) {
   return deriveRtcDriftEvidence({
     latestRtcSyncResult,
+    storedBaseline: rtcDriftBaseline,
     eventStore,
+    rawEventStoreCapacity: eventStoreMaxEvents,
+    rawEventStoreCurrentEvents: eventStoreSummary.current_events,
+    rawEventStoreDroppedOldEvents: eventStoreDroppedOldEvents,
   });
 }
 

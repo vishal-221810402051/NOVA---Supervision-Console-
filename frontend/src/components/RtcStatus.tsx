@@ -10,7 +10,11 @@ export function RtcStatus() {
   const rtc = useTelemetryStore((state) => state.rtcStatus);
   const latestRtcStatusPacket = useTelemetryStore((state) => state.latestRtcStatusPacket);
   const latestRtcSyncResult = useTelemetryStore((state) => state.latestRtcSyncResult);
+  const rtcDriftBaseline = useTelemetryStore((state) => state.rtcDriftBaseline);
   const eventStore = useTelemetryStore((state) => state.eventStore);
+  const eventStoreMaxEvents = useTelemetryStore((state) => state.eventStoreMaxEvents);
+  const eventStoreSummary = useTelemetryStore((state) => state.eventStoreSummary);
+  const eventStoreDroppedOldEvents = useTelemetryStore((state) => state.eventStoreDroppedOldEvents);
   const isTelemetryStale = useTelemetryStore((state) => state.isTelemetryStale);
   const validity = deriveRtcValidity(rtc);
   const retention = deriveRtcRetentionEvidence({
@@ -20,6 +24,10 @@ export function RtcStatus() {
   const drift = deriveRtcDriftEvidence({
     latestRtcSyncResult,
     eventStore,
+    storedBaseline: rtcDriftBaseline,
+    rawEventStoreCapacity: eventStoreMaxEvents,
+    rawEventStoreCurrentEvents: eventStoreSummary.current_events,
+    rawEventStoreDroppedOldEvents: eventStoreDroppedOldEvents,
   });
   const syncPayload = latestRtcSyncResult?.payload ?? null;
 
@@ -118,9 +126,13 @@ export function RtcStatus() {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <Metric label="Drift Status" value={drift.drift_status} />
           <Metric label="Check Available" value={formatBoolean(drift.drift_check_available)} />
-          <Metric label="Observation Target" value={`${drift.observation_window_target_seconds} s`} />
+          <Metric label="Target Window" value={`${drift.observation_window_target_seconds} seconds / 1 hour`} />
           <Metric label="Observation Elapsed" value={formatNullableNumber(drift.observation_elapsed_seconds, " s")} />
           <Metric label="Sample Count" value={`${drift.sample_count}`} />
+          <Metric label="Baseline Persisted In Session" value={formatBoolean(drift.baseline_persisted_in_session)} />
+          <Metric label="Raw Event Store Capacity" value={formatNullableNumber(drift.raw_event_store_capacity)} />
+          <Metric label="Raw Event Store Current Events" value={formatNullableNumber(drift.raw_event_store_current_events)} />
+          <Metric label="Raw Event Store Dropped Old Events" value={formatNullableNumber(drift.raw_event_store_dropped_old_events)} />
           <Metric label="Baseline Min Settle" value={`${drift.baseline_min_settle_seconds} s`} />
           <Metric label="Baseline Selected After Sync" value={formatNullableNumber(drift.baseline_selected_after_sync_seconds, " s")} />
           <Metric label="Sync Readback Delta" value={formatNullableNumber(drift.sync_readback_delta_ms, " ms")} />
@@ -198,13 +210,13 @@ function getDriftMissingReason(status: string) {
     case "DRIFT_SYNC_RESULT_MISSING":
       return "Missing reason: RTC_SYNC_SUCCESS has not been captured in this frontend session.";
     case "DRIFT_SETTLING_AFTER_SYNC":
-      return "Missing reason: waiting for the 30-second post-sync baseline settle window.";
+      return "Missing reason: waiting for the hardened 30-second post-sync drift baseline.";
     case "DRIFT_BASELINE_PENDING":
       return "Missing reason: hardened baseline is selected; waiting for another valid RTC_STATUS_TELEMETRY sample.";
     case "DRIFT_BASELINE_UNSTABLE":
       return "Missing reason: no stable baseline passed the 30-second settle and sync-readback consistency gates.";
     case "DRIFT_OBSERVATION_IN_PROGRESS":
-      return "Missing reason: the 30-minute drift observation window is still in progress.";
+      return "Missing reason: the 1-hour drift observation window is still in progress.";
     case "DRIFT_OSF_REASSERTED":
       return "Missing reason: DS3231 oscillator stop flag reasserted during drift observation.";
     case "DRIFT_TIME_NOT_ADVANCING":

@@ -6,6 +6,7 @@ import type {
   GatewayHealthPayload,
   PacketValidationResult,
   PowerHealthPayload,
+  RtcDriftBaseline,
   RtcStatusPayload,
   SystemHealthPayload,
   TelemetryPacket,
@@ -45,6 +46,7 @@ import {
   type TelemetryEventInput,
   type TelemetryEventRecord,
 } from "../state/eventStore";
+import { deriveRtcDriftBaselineForSession } from "../state/rtcValidity";
 
 type SoakVerdictStatus = "PASS" | "WARNING" | "FAIL" | "IN_PROGRESS";
 
@@ -138,6 +140,7 @@ type TelemetryState = {
   rtcStatus: RtcStatusPayload | null;
   latestRtcStatusPacket: RtcStatusPacket | null;
   latestRtcSyncResult: RtcSyncResultPacket | null;
+  rtcDriftBaseline: RtcDriftBaseline | null;
   gatewayHealth: GatewayHealthPayload | null;
   deviceRegistry: DeviceRegistry;
   registrySummary: ReturnType<typeof getRegistrySummary>;
@@ -293,6 +296,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   rtcStatus: null,
   latestRtcStatusPacket: null,
   latestRtcSyncResult: null,
+  rtcDriftBaseline: null,
   gatewayHealth: null,
   deviceRegistry: createInitialDeviceRegistry(),
   registrySummary: getRegistrySummary(createInitialDeviceRegistry()),
@@ -424,6 +428,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       soakMetrics: createInitialSoakMetrics(),
       latestRtcStatusPacket: null,
       latestRtcSyncResult: null,
+      rtcDriftBaseline: null,
     }),
 
   resetConnectionStats: () =>
@@ -453,6 +458,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       logs: [],
       latestRtcStatusPacket: null,
       latestRtcSyncResult: null,
+      rtcDriftBaseline: null,
     }),
 
   recordPacketRejection: (result) =>
@@ -823,6 +829,20 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           eventStoreDroppedOldEvents: acceptedEventUpdate.eventStoreDroppedOldEvents,
         }
       );
+      const latestRtcSyncResult =
+        packet.event_type === "RTC_SYNC_RESULT_TELEMETRY"
+          ? packet
+          : state.latestRtcSyncResult;
+      const existingRtcDriftBaseline =
+        packet.event_type === "RTC_SYNC_RESULT_TELEMETRY"
+          ? null
+          : state.rtcDriftBaseline;
+      const rtcDriftBaseline =
+        existingRtcDriftBaseline ??
+        deriveRtcDriftBaselineForSession({
+          latestRtcSyncResult,
+          eventStore: acceptedEventUpdate.eventStore,
+        });
 
       return {
         ...acceptedEventUpdate,
@@ -859,9 +879,8 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
             ? packet
             : state.latestRtcStatusPacket,
         latestRtcSyncResult:
-          packet.event_type === "RTC_SYNC_RESULT_TELEMETRY"
-            ? packet
-            : state.latestRtcSyncResult,
+          latestRtcSyncResult,
+        rtcDriftBaseline,
         gatewayHealth:
           packet.event_type === "GATEWAY_HEALTH_TELEMETRY"
             ? packet.payload

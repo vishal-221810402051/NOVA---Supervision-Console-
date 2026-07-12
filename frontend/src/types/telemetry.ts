@@ -308,6 +308,10 @@ export type RtcDriftEvidence = {
   observation_window_target_seconds: number;
   observation_elapsed_seconds: number | null;
   sample_count: number;
+  baseline_persisted_in_session: boolean;
+  raw_event_store_capacity: number | null;
+  raw_event_store_current_events: number | null;
+  raw_event_store_dropped_old_events: number | null;
   baseline_min_settle_seconds: number;
   baseline_candidate_count: number;
   baseline_rejected_count: number;
@@ -333,6 +337,22 @@ export type RtcDriftEvidence = {
   required_next_action: string;
   evidence_note: string;
   tolerance_ms: number;
+};
+
+export type RtcDriftBaseline = {
+  baseline_source: string;
+  baseline_rtc_time_utc: string;
+  baseline_pi_utc: string;
+  baseline_rtc_pi_delta_ms: number;
+  baseline_selected_after_sync_seconds: number;
+  baseline_delta_vs_sync_readback_ms: number | null;
+  sync_readback_delta_ms: number | null;
+  sync_session_id: string;
+  sync_timestamp_utc: string;
+  stream_id: string;
+  source_node_id: string;
+  baseline_min_settle_seconds: number;
+  created_at_report_only_utc: string;
 };
 
 export type GatewayHealthPayload = {

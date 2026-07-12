@@ -13,6 +13,7 @@ export function ReportExportPanel() {
   const rtcStatus = useTelemetryStore((s) => s.rtcStatus);
   const latestRtcStatusPacket = useTelemetryStore((s) => s.latestRtcStatusPacket);
   const latestRtcSyncResult = useTelemetryStore((s) => s.latestRtcSyncResult);
+  const rtcDriftBaseline = useTelemetryStore((s) => s.rtcDriftBaseline);
   const activeTelemetrySource = useTelemetryStore((s) => s.activeTelemetrySource);
   const globalHealth = useTelemetryStore((s) => s.globalHealth);
   const connectionState = useTelemetryStore((s) => s.connectionState);
@@ -53,6 +54,7 @@ export function ReportExportPanel() {
       rtcStatus,
       latestRtcStatusPacket,
       latestRtcSyncResult,
+      rtcDriftBaseline,
       activeTelemetrySource,
       globalHealth,
       connectionState,
