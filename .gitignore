@@ -36,3 +36,6 @@ Thumbs.db
 # PlatformIO metadata
 .sconsign*
 project.checksum
+
+# NOVA SC runtime persistent evidence artifacts
+backend/evidence/
