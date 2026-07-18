@@ -5,6 +5,7 @@ import type {
   EngineeringLog,
   GatewayHealthPayload,
   PacketValidationResult,
+  PersistentEvidenceSummary,
   PowerHealthPayload,
   RtcDriftBaseline,
   RtcStatusPayload,
@@ -142,6 +143,7 @@ type TelemetryState = {
   latestRtcSyncResult: RtcSyncResultPacket | null;
   rtcDriftBaseline: RtcDriftBaseline | null;
   gatewayHealth: GatewayHealthPayload | null;
+  persistentEvidenceSummary: PersistentEvidenceSummary | null;
   deviceRegistry: DeviceRegistry;
   registrySummary: ReturnType<typeof getRegistrySummary>;
   linkRegistry: LinkRegistry;
@@ -298,6 +300,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   latestRtcSyncResult: null,
   rtcDriftBaseline: null,
   gatewayHealth: null,
+  persistentEvidenceSummary: null,
   deviceRegistry: createInitialDeviceRegistry(),
   registrySummary: getRegistrySummary(createInitialDeviceRegistry()),
   linkRegistry: createInitialLinkRegistry(),
@@ -429,6 +432,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       latestRtcStatusPacket: null,
       latestRtcSyncResult: null,
       rtcDriftBaseline: null,
+      persistentEvidenceSummary: null,
     }),
 
   resetConnectionStats: () =>
@@ -459,6 +463,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       latestRtcStatusPacket: null,
       latestRtcSyncResult: null,
       rtcDriftBaseline: null,
+      persistentEvidenceSummary: null,
     }),
 
   recordPacketRejection: (result) =>
@@ -885,6 +890,10 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           packet.event_type === "GATEWAY_HEALTH_TELEMETRY"
             ? packet.payload
             : state.gatewayHealth,
+        persistentEvidenceSummary:
+          packet.event_type === "GATEWAY_HEALTH_TELEMETRY"
+            ? packet.payload.persistent_evidence_summary ?? state.persistentEvidenceSummary
+            : state.persistentEvidenceSummary,
         deviceRegistry,
         registrySummary: getRegistrySummary(deviceRegistry),
         linkRegistry,

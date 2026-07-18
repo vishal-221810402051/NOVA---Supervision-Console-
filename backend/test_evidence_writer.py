@@ -8,6 +8,7 @@ import unittest
 from evidence_writer import (
     PersistentEvidenceWriter,
     PersistentEvidenceWriterConfig,
+    build_persistent_evidence_summary,
     compute_run_root_sha256,
     inspect_run_finalization_status,
 )
@@ -43,6 +44,21 @@ class PersistentEvidenceWriterTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertFalse(root.exists())
             self.assertEqual(writer.stats_snapshot()["persistent_events_written"], 0)
+
+    async def test_disabled_summary_serializes_safe_defaults(self):
+        summary = build_persistent_evidence_summary(None)
+
+        self.assertFalse(summary["persistent_evidence_enabled"])
+        self.assertFalse(summary["persistent_evidence_active"])
+        self.assertFalse(summary["persistent_hash_available"])
+        self.assertFalse(summary["persistent_replay_validated"])
+        self.assertFalse(summary["tamper_proof"])
+        self.assertFalse(summary["cryptographic_attestation"])
+        self.assertEqual(summary["persistent_replay_validation_status"], "NOT_VALIDATED")
+        self.assertEqual(
+            summary["required_next_action"],
+            "ENABLE_BACKEND_PERSISTENT_EVIDENCE_FOR_VALIDATION_RUN",
+        )
 
     async def test_enabled_creates_run_directory_and_manifest(self):
         with TemporaryDirectory() as temp_dir:
@@ -193,6 +209,35 @@ class PersistentEvidenceWriterTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(manifest["run_root_sha256"])
             self.assertTrue(manifest["segments"][0]["finalized"])
             self.assertIsNotNone(manifest["segments"][0]["sha256"])
+
+            summary = build_persistent_evidence_summary(
+                writer,
+                frontend_raw_replay_complete=False,
+                frontend_event_store_capacity=20000,
+                frontend_event_store_current_events=20000,
+                frontend_event_store_dropped_old_events=1,
+            )
+            self.assertTrue(summary["persistent_evidence_enabled"])
+            self.assertFalse(summary["persistent_evidence_active"])
+            self.assertTrue(summary["finalized"])
+            self.assertTrue(summary["hash_finalized"])
+            self.assertTrue(summary["persistent_hash_available"])
+            self.assertIsNotNone(summary["run_root_sha256"])
+            self.assertEqual(summary["integrity_scope"], "file_integrity_detection_only")
+            self.assertFalse(summary["persistent_replay_validated"])
+            self.assertFalse(summary["tamper_proof"])
+            self.assertFalse(summary["cryptographic_attestation"])
+            self.assertEqual(
+                summary["persistent_replay_validation_status"],
+                "PENDING_SOAK_VALIDATION",
+            )
+            self.assertEqual(
+                summary["required_next_action"],
+                "RUN_PHASE_7_2G_E_F_PERSISTENT_EVIDENCE_SOAK_VALIDATION",
+            )
+            self.assertEqual(summary["frontend_event_store_capacity"], 20000)
+            self.assertEqual(summary["frontend_event_store_dropped_old_events"], 1)
+            self.assertFalse(Path(summary["evidence_run_dir"]).is_absolute())
 
     async def test_segment_sha256_matches_actual_ndjson_contents(self):
         with TemporaryDirectory() as temp_dir:

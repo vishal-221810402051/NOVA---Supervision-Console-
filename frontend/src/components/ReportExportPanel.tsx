@@ -14,6 +14,7 @@ export function ReportExportPanel() {
   const latestRtcStatusPacket = useTelemetryStore((s) => s.latestRtcStatusPacket);
   const latestRtcSyncResult = useTelemetryStore((s) => s.latestRtcSyncResult);
   const rtcDriftBaseline = useTelemetryStore((s) => s.rtcDriftBaseline);
+  const persistentEvidenceSummary = useTelemetryStore((s) => s.persistentEvidenceSummary);
   const activeTelemetrySource = useTelemetryStore((s) => s.activeTelemetrySource);
   const globalHealth = useTelemetryStore((s) => s.globalHealth);
   const connectionState = useTelemetryStore((s) => s.connectionState);
@@ -50,6 +51,7 @@ export function ReportExportPanel() {
       linkRegistry,
       linkRegistrySummary,
       gatewayHealth,
+      persistentEvidenceSummary,
       powerHealth,
       rtcStatus,
       latestRtcStatusPacket,
@@ -115,6 +117,7 @@ export function ReportExportPanel() {
         <Metric label="Includes Logs" value="Last 50 Events" />
         <Metric label="Includes Event Store" value="Last 50 Event Records" />
         <Metric label="Replay Reconstruction" value="Included" />
+        <Metric label="Persistent Evidence" value={persistentEvidenceSummary?.persistent_evidence_enabled ? "Backend Enabled" : "Backend Disabled"} />
         <Metric label="Soak Summary" value="Included" />
         <Metric label="Soak Verdict" value={soakMetrics.verdict.status} />
         <Metric label="Simulator Mode" value={activeTelemetrySource.is_simulated ? "TRUE" : "FALSE"} />

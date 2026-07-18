@@ -8,6 +8,7 @@ import type {
   HealthCheckResult,
   HealthCheckRule,
   HealthState,
+  PersistentEvidenceSummary,
   PowerHealthPayload,
   RtcDriftBaseline,
   RtcDriftEvidence,
@@ -194,6 +195,7 @@ export type NovaScValidationReport = {
     tolerance_ms: number;
   };
   rtc_drift_summary: RtcDriftEvidence;
+  persistent_evidence_summary: PersistentEvidenceSummary;
   expected_warnings: HealthCheckRule[];
   known_limitations: string[];
   disabled_features: string[];
@@ -216,6 +218,7 @@ export function buildNovaScValidationReport(params: {
     unknown: number;
   };
   gatewayHealth: GatewayHealthPayload | null;
+  persistentEvidenceSummary: PersistentEvidenceSummary | null;
   powerHealth: PowerHealthPayload | null;
   rtcStatus: RtcStatusPayload | null;
   latestRtcStatusPacket: Extract<TelemetryPacket, { event_type: "RTC_STATUS_TELEMETRY" }> | null;
@@ -293,6 +296,13 @@ export function buildNovaScValidationReport(params: {
       sequenceResets: params.sequenceResets,
       streamSwitches: params.streamSwitches,
     },
+  });
+  const persistentEvidenceSummary = buildPersistentEvidenceSummary({
+    backendSummary:
+      params.persistentEvidenceSummary ??
+      params.gatewayHealth?.persistent_evidence_summary ??
+      null,
+    eventStoreSummary: params.eventStoreSummary,
   });
 
   return {
@@ -441,6 +451,7 @@ export function buildNovaScValidationReport(params: {
       eventStoreSummary: params.eventStoreSummary,
       eventStoreDroppedOldEvents: params.eventStoreDroppedOldEvents,
     }),
+    persistent_evidence_summary: persistentEvidenceSummary,
     expected_warnings: healthCheck.rules.filter(
       (rule) =>
         rule.category === "EXPECTED_WARNING" || rule.rule_id.includes("FRAM")
@@ -545,6 +556,78 @@ function buildDisabledFeatures() {
     "relays",
     "heaters",
   ];
+}
+
+function buildPersistentEvidenceSummary(params: {
+  backendSummary: PersistentEvidenceSummary | null;
+  eventStoreSummary: EventStoreSummary;
+}): PersistentEvidenceSummary {
+  const frontendRawReplayComplete = params.eventStoreSummary.dropped_old_events === 0;
+  const backendSummary = params.backendSummary;
+
+  if (!backendSummary) {
+    return {
+      persistent_evidence_enabled: false,
+      persistent_evidence_active: false,
+      evidence_run_id: null,
+      evidence_phase_id: null,
+      evidence_run_dir: null,
+      evidence_manifest_path: null,
+      evidence_integrity_path: null,
+      evidence_summary_path: null,
+      evidence_segments_written: 0,
+      persistent_events_written: 0,
+      persistent_events_dropped: 0,
+      persistent_writer_errors: 0,
+      finalized: false,
+      hash_finalized: false,
+      run_root_sha256: null,
+      integrity_scope: null,
+      tamper_proof: false,
+      cryptographic_attestation: false,
+      persistent_hash_available: false,
+      persistent_replay_validated: false,
+      persistent_replay_validation_status: "NOT_VALIDATED",
+      frontend_raw_replay_complete: frontendRawReplayComplete,
+      frontend_event_store_capacity: params.eventStoreSummary.max_events,
+      frontend_event_store_current_events: params.eventStoreSummary.current_events,
+      frontend_event_store_dropped_old_events: params.eventStoreSummary.dropped_old_events,
+      required_next_action: "ENABLE_BACKEND_PERSISTENT_EVIDENCE_FOR_VALIDATION_RUN",
+    };
+  }
+
+  const persistentHashAvailable =
+    backendSummary.hash_finalized === true &&
+    typeof backendSummary.run_root_sha256 === "string" &&
+    backendSummary.run_root_sha256.length > 0;
+  const requiredNextAction =
+    backendSummary.persistent_writer_errors > 0 ||
+    backendSummary.persistent_events_dropped > 0
+      ? "INVESTIGATE_PERSISTENT_EVIDENCE_WRITER_HEALTH"
+      : backendSummary.persistent_evidence_enabled === false
+        ? "ENABLE_BACKEND_PERSISTENT_EVIDENCE_FOR_VALIDATION_RUN"
+        : backendSummary.persistent_evidence_active && !backendSummary.finalized
+          ? "COMPLETE_AND_FINALIZE_PERSISTENT_EVIDENCE_RUN"
+          : backendSummary.finalized && persistentHashAvailable
+            ? "RUN_PHASE_7_2G_E_F_PERSISTENT_EVIDENCE_SOAK_VALIDATION"
+            : "COMPLETE_AND_FINALIZE_PERSISTENT_EVIDENCE_RUN";
+
+  return {
+    ...backendSummary,
+    integrity_scope: persistentHashAvailable ? "file_integrity_detection_only" : null,
+    tamper_proof: false,
+    cryptographic_attestation: false,
+    persistent_hash_available: persistentHashAvailable,
+    persistent_replay_validated: false,
+    persistent_replay_validation_status: backendSummary.persistent_evidence_enabled
+      ? "PENDING_SOAK_VALIDATION"
+      : "NOT_VALIDATED",
+    frontend_raw_replay_complete: frontendRawReplayComplete,
+    frontend_event_store_capacity: params.eventStoreSummary.max_events,
+    frontend_event_store_current_events: params.eventStoreSummary.current_events,
+    frontend_event_store_dropped_old_events: params.eventStoreSummary.dropped_old_events,
+    required_next_action: requiredNextAction,
+  };
 }
 
 function buildNodeSummary(params: {

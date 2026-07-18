@@ -85,7 +85,10 @@ def build_packet_metadata(
     }
 
 
-def build_gateway_health_packet(state: GatewayState) -> dict[str, Any]:
+def build_gateway_health_packet(
+    state: GatewayState,
+    persistent_evidence_summary: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     health_status = state.to_health_status()
     bridge_healthy = health_status["bridge_status"] in {
         "DISABLED",
@@ -119,6 +122,7 @@ def build_gateway_health_packet(state: GatewayState) -> dict[str, Any]:
             "last_esp32_sub_packet_utc": health_status["last_esp32_sub_packet_utc"],
             "stream_id": health_status["stream_id"],
             "mode": health_status["backend_mode"],
+            "persistent_evidence_summary": persistent_evidence_summary,
         },
     }
 

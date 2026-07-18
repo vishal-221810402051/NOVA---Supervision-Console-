@@ -355,6 +355,35 @@ export type RtcDriftBaseline = {
   created_at_report_only_utc: string;
 };
 
+export type PersistentEvidenceSummary = {
+  persistent_evidence_enabled: boolean;
+  persistent_evidence_active: boolean;
+  evidence_run_id: string | null;
+  evidence_phase_id: string | null;
+  evidence_run_dir: string | null;
+  evidence_manifest_path: string | null;
+  evidence_integrity_path: string | null;
+  evidence_summary_path: string | null;
+  evidence_segments_written: number;
+  persistent_events_written: number;
+  persistent_events_dropped: number;
+  persistent_writer_errors: number;
+  finalized: boolean;
+  hash_finalized: boolean;
+  run_root_sha256: string | null;
+  integrity_scope: "file_integrity_detection_only" | null;
+  tamper_proof: false;
+  cryptographic_attestation: false;
+  persistent_hash_available: boolean;
+  persistent_replay_validated: false;
+  persistent_replay_validation_status: "NOT_VALIDATED" | "PENDING_SOAK_VALIDATION";
+  frontend_raw_replay_complete: boolean | null;
+  frontend_event_store_capacity: number | null;
+  frontend_event_store_current_events: number | null;
+  frontend_event_store_dropped_old_events: number | null;
+  required_next_action: string;
+};
+
 export type GatewayHealthPayload = {
   node_id: "pi_gateway";
   health_state: HealthState;
@@ -365,6 +394,7 @@ export type GatewayHealthPayload = {
   buffer_depth: number;
   dropped_packets: number;
   status_message: string;
+  persistent_evidence_summary?: PersistentEvidenceSummary | null;
 };
 
 export type LinkHeartbeatPayload = {

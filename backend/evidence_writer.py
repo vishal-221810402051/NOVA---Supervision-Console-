@@ -14,6 +14,13 @@ from typing import Any
 
 SCHEMA_VERSION = "phase_7_2g_e_c.v1"
 HASH_ALGORITHM = "SHA-256"
+INTEGRITY_SCOPE_FILE_DETECTION = "file_integrity_detection_only"
+REPLAY_STATUS_NOT_VALIDATED = "NOT_VALIDATED"
+REPLAY_STATUS_PENDING_SOAK_VALIDATION = "PENDING_SOAK_VALIDATION"
+NEXT_ACTION_ENABLE_EVIDENCE = "ENABLE_BACKEND_PERSISTENT_EVIDENCE_FOR_VALIDATION_RUN"
+NEXT_ACTION_FINALIZE_RUN = "COMPLETE_AND_FINALIZE_PERSISTENT_EVIDENCE_RUN"
+NEXT_ACTION_RUN_SOAK_VALIDATION = "RUN_PHASE_7_2G_E_F_PERSISTENT_EVIDENCE_SOAK_VALIDATION"
+NEXT_ACTION_INVESTIGATE_WRITER = "INVESTIGATE_PERSISTENT_EVIDENCE_WRITER_HEALTH"
 
 
 def utc_now() -> str:
@@ -110,6 +117,105 @@ def inspect_run_finalization_status(run_dir: str | Path) -> dict[str, Any]:
         "segment_files_found": [segment.name for segment in segment_files],
         "incomplete_reason": incomplete_reason,
         "recoverable": path.exists() and bool(segment_files),
+    }
+
+
+def _backend_relative_path(path_value: str | Path | None) -> str | None:
+    if path_value is None:
+        return None
+
+    path = Path(path_value)
+    if not path.is_absolute():
+        return path.as_posix()
+
+    backend_root = Path(__file__).resolve().parent
+    try:
+        return (Path("backend") / path.relative_to(backend_root)).as_posix()
+    except ValueError:
+        return path.name
+
+
+def _required_next_action(
+    *,
+    enabled: bool,
+    active: bool,
+    finalized: bool,
+    persistent_events_dropped: int,
+    writer_errors: int,
+    persistent_hash_available: bool,
+) -> str:
+    if writer_errors > 0 or persistent_events_dropped > 0:
+        return NEXT_ACTION_INVESTIGATE_WRITER
+    if not enabled:
+        return NEXT_ACTION_ENABLE_EVIDENCE
+    if active and not finalized:
+        return NEXT_ACTION_FINALIZE_RUN
+    if finalized and persistent_hash_available:
+        return NEXT_ACTION_RUN_SOAK_VALIDATION
+    return NEXT_ACTION_FINALIZE_RUN
+
+
+def build_persistent_evidence_summary(
+    writer: "PersistentEvidenceWriter | None",
+    *,
+    frontend_raw_replay_complete: bool | None = None,
+    frontend_event_store_capacity: int | None = None,
+    frontend_event_store_current_events: int | None = None,
+    frontend_event_store_dropped_old_events: int | None = None,
+) -> dict[str, Any]:
+    stats = writer.stats_snapshot() if writer is not None else {}
+    enabled = bool(stats.get("enabled"))
+    active = bool(stats.get("active"))
+    finalized = bool(stats.get("finalized"))
+    hash_finalized = bool(stats.get("hash_finalized"))
+    run_root_sha256 = stats.get("run_root_sha256")
+    persistent_hash_available = bool(hash_finalized and run_root_sha256)
+    persistent_events_dropped = int(stats.get("persistent_events_dropped") or 0)
+    writer_errors = int(stats.get("writer_errors") or 0)
+    run_dir = stats.get("evidence_run_dir")
+
+    integrity_filename = stats.get("integrity_filename")
+    summary_filename = stats.get("summary_filename")
+    manifest_path = Path(run_dir) / "manifest.json" if run_dir else None
+    integrity_path = Path(run_dir) / integrity_filename if run_dir and integrity_filename else None
+    summary_path = Path(run_dir) / summary_filename if run_dir and summary_filename else None
+
+    return {
+        "persistent_evidence_enabled": enabled,
+        "persistent_evidence_active": active,
+        "evidence_run_id": stats.get("evidence_run_id"),
+        "evidence_phase_id": stats.get("evidence_phase_id"),
+        "evidence_run_dir": _backend_relative_path(run_dir),
+        "evidence_manifest_path": _backend_relative_path(manifest_path),
+        "evidence_integrity_path": _backend_relative_path(integrity_path),
+        "evidence_summary_path": _backend_relative_path(summary_path),
+        "evidence_segments_written": int(stats.get("segment_count") or 0),
+        "persistent_events_written": int(stats.get("persistent_events_written") or 0),
+        "persistent_events_dropped": persistent_events_dropped,
+        "persistent_writer_errors": writer_errors,
+        "finalized": finalized,
+        "hash_finalized": hash_finalized,
+        "run_root_sha256": run_root_sha256,
+        "integrity_scope": INTEGRITY_SCOPE_FILE_DETECTION if persistent_hash_available else None,
+        "tamper_proof": False,
+        "cryptographic_attestation": False,
+        "persistent_hash_available": persistent_hash_available,
+        "persistent_replay_validated": False,
+        "persistent_replay_validation_status": (
+            REPLAY_STATUS_PENDING_SOAK_VALIDATION if enabled else REPLAY_STATUS_NOT_VALIDATED
+        ),
+        "frontend_raw_replay_complete": frontend_raw_replay_complete,
+        "frontend_event_store_capacity": frontend_event_store_capacity,
+        "frontend_event_store_current_events": frontend_event_store_current_events,
+        "frontend_event_store_dropped_old_events": frontend_event_store_dropped_old_events,
+        "required_next_action": _required_next_action(
+            enabled=enabled,
+            active=active,
+            finalized=finalized,
+            persistent_events_dropped=persistent_events_dropped,
+            writer_errors=writer_errors,
+            persistent_hash_available=persistent_hash_available,
+        ),
     }
 
 
@@ -289,6 +395,7 @@ class PersistentEvidenceWriter:
             "enabled": self.enabled,
             "active": self.active,
             "evidence_run_id": self.evidence_run_id,
+            "evidence_phase_id": self.config.phase_id,
             "evidence_run_dir": str(self.evidence_run_dir) if self.evidence_run_dir else None,
             "persistent_events_written": self.persistent_events_written,
             "persistent_events_dropped": self.persistent_events_dropped,
@@ -301,6 +408,17 @@ class PersistentEvidenceWriter:
             "run_root_sha256": self.run_root_sha256,
             "integrity_filename": self.integrity_filename,
             "summary_filename": self.summary_filename,
+            "integrity_scope": INTEGRITY_SCOPE_FILE_DETECTION
+            if self.hash_finalized and self.run_root_sha256
+            else None,
+            "tamper_proof": False,
+            "cryptographic_attestation": False,
+            "persistent_replay_validated": False,
+            "persistent_replay_validation_status": (
+                REPLAY_STATUS_PENDING_SOAK_VALIDATION
+                if self.enabled
+                else REPLAY_STATUS_NOT_VALIDATED
+            ),
         }
 
     async def _run(self) -> None:
@@ -456,7 +574,7 @@ class PersistentEvidenceWriter:
             ],
             "run_root_sha256": self.run_root_sha256,
             "hash_finalized": True,
-            "integrity_scope": "file_integrity_detection_only",
+            "integrity_scope": INTEGRITY_SCOPE_FILE_DETECTION,
             "tamper_proof": False,
             "cryptographic_attestation": False,
         }

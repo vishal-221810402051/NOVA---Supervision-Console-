@@ -6,7 +6,11 @@ import os
 from pathlib import Path
 import random
 
-from evidence_writer import PersistentEvidenceWriter, PersistentEvidenceWriterConfig
+from evidence_writer import (
+    PersistentEvidenceWriter,
+    PersistentEvidenceWriterConfig,
+    build_persistent_evidence_summary,
+)
 from gateway_state import GatewayState
 from protocol import (
     build_gateway_health_packet as build_hardware_gateway_health_packet,
@@ -155,7 +159,7 @@ async def startup():
     hardware_stream_manager = HardwareStreamManager(
         source_queue=hardware_packet_queue,
         gateway_state=hardware_gateway_state,
-        gateway_health_builder=build_hardware_gateway_health_packet,
+        gateway_health_builder=build_hardware_gateway_health_packet_with_evidence,
         evidence_enqueue=evidence_writer.enqueue if evidence_writer.enabled else None,
         gateway_interval_seconds=1.0,
     )
@@ -187,6 +191,17 @@ async def shutdown():
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
+
+
+def current_persistent_evidence_summary():
+    return build_persistent_evidence_summary(evidence_writer)
+
+
+def build_hardware_gateway_health_packet_with_evidence(state: GatewayState):
+    return build_hardware_gateway_health_packet(
+        state,
+        persistent_evidence_summary=current_persistent_evidence_summary(),
+    )
 
 
 def next_source_sequence(source_node_id: str):
@@ -430,6 +445,7 @@ def health():
         "last_esp32_main_packet_utc": hardware_status["last_esp32_main_packet_utc"],
         "last_esp32_sub_packet_utc": hardware_status["last_esp32_sub_packet_utc"],
         "last_error": hardware_status["last_error"],
+        "persistent_evidence_summary": current_persistent_evidence_summary(),
     }
 
 
@@ -437,7 +453,7 @@ async def stream_hardware_packets(websocket: WebSocket):
     if hardware_stream_manager is None:
         while True:
             await websocket.send_json(
-                build_hardware_gateway_health_packet(hardware_gateway_state)
+                build_hardware_gateway_health_packet_with_evidence(hardware_gateway_state)
             )
             await asyncio.sleep(1)
 
