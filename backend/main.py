@@ -3,8 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone
 import asyncio
 import os
+from pathlib import Path
 import random
 
+from evidence_writer import PersistentEvidenceWriter, PersistentEvidenceWriterConfig
 from gateway_state import GatewayState
 from protocol import (
     build_gateway_health_packet as build_hardware_gateway_health_packet,
@@ -34,6 +36,44 @@ try:
 except ValueError:
     SERIAL_BAUD = 115200
 
+EVIDENCE_ENABLED = os.getenv("NOVA_SC_EVIDENCE_ENABLED", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+DEFAULT_EVIDENCE_ROOT = Path(__file__).resolve().parent / "evidence" / "soak_runs"
+EVIDENCE_ROOT = os.getenv("NOVA_SC_EVIDENCE_ROOT", str(DEFAULT_EVIDENCE_ROOT))
+EVIDENCE_PHASE_ID = os.getenv("NOVA_SC_EVIDENCE_PHASE_ID", "PHASE_7_2G_E_C")
+
+
+def _read_float_env(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
+def _read_int_env(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
+EVIDENCE_ROTATE_MINUTES = _read_float_env("NOVA_SC_EVIDENCE_ROTATE_MINUTES", 10.0)
+EVIDENCE_ROTATE_MB = _read_float_env("NOVA_SC_EVIDENCE_ROTATE_MB", 50.0)
+EVIDENCE_FLUSH_INTERVAL_SECONDS = _read_float_env(
+    "NOVA_SC_EVIDENCE_FLUSH_INTERVAL_SECONDS",
+    5.0,
+)
+EVIDENCE_QUEUE_SIZE = _read_int_env("NOVA_SC_EVIDENCE_QUEUE_SIZE", 10000)
+EVIDENCE_TARGET_MINUTES = (
+    _read_int_env("NOVA_SC_EVIDENCE_TARGET_MINUTES", 0)
+    if os.getenv("NOVA_SC_EVIDENCE_TARGET_MINUTES")
+    else None
+)
+
 hardware_gateway_state = GatewayState(
     mode=BACKEND_MODE,
     stream_prefix="PI_STREAM",
@@ -44,6 +84,7 @@ hardware_packet_queue: asyncio.Queue[dict] = asyncio.Queue()
 serial_bridge: SerialBridge | None = None
 hardware_stream_manager: HardwareStreamManager | None = None
 rtc_sync_ipc_server: RtcSyncIpcServer | None = None
+evidence_writer: PersistentEvidenceWriter | None = None
 
 NODE_IDS = {
     "LAPTOP_CONSOLE": "laptop_console",
@@ -75,7 +116,7 @@ LINK_HEARTBEAT_COUNTERS = {
 
 @app.on_event("startup")
 async def startup():
-    global serial_bridge, hardware_stream_manager, rtc_sync_ipc_server
+    global serial_bridge, hardware_stream_manager, rtc_sync_ipc_server, evidence_writer
     if BACKEND_MODE != "hardware":
         hardware_gateway_state.set_serial_status(
             serial_connected=False,
@@ -83,6 +124,27 @@ async def startup():
             bridge_status="DISABLED",
         )
         return
+
+    evidence_writer = PersistentEvidenceWriter(
+        PersistentEvidenceWriterConfig(
+            enabled=EVIDENCE_ENABLED,
+            evidence_root=Path(EVIDENCE_ROOT),
+            phase_id=EVIDENCE_PHASE_ID,
+            rotation_minutes=EVIDENCE_ROTATE_MINUTES,
+            rotation_mb=EVIDENCE_ROTATE_MB,
+            flush_interval_seconds=EVIDENCE_FLUSH_INTERVAL_SECONDS,
+            queue_size=EVIDENCE_QUEUE_SIZE,
+            target_duration_minutes=EVIDENCE_TARGET_MINUTES,
+            backend_mode=BACKEND_MODE,
+            serial_port=SERIAL_PORT,
+            serial_baud=SERIAL_BAUD,
+            hardware_connected=True,
+            transport_kind="WEBSOCKET",
+            transport_simulated=False,
+            stream_id=hardware_gateway_state.stream_id,
+        )
+    )
+    await evidence_writer.start()
 
     serial_bridge = SerialBridge(
         state=hardware_gateway_state,
@@ -94,6 +156,7 @@ async def startup():
         source_queue=hardware_packet_queue,
         gateway_state=hardware_gateway_state,
         gateway_health_builder=build_hardware_gateway_health_packet,
+        evidence_enqueue=evidence_writer.enqueue if evidence_writer.enabled else None,
         gateway_interval_seconds=1.0,
     )
     await hardware_stream_manager.start()
@@ -118,6 +181,8 @@ async def shutdown():
         await serial_bridge.stop()
     if hardware_stream_manager is not None:
         await hardware_stream_manager.stop()
+    if evidence_writer is not None:
+        await evidence_writer.stop()
 
 
 def utc_now():

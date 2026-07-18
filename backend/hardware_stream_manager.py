@@ -13,12 +13,14 @@ class HardwareStreamManager:
         source_queue: asyncio.Queue[dict[str, Any]],
         gateway_state: GatewayState,
         gateway_health_builder: Callable[[GatewayState], dict[str, Any]],
+        evidence_enqueue: Callable[[dict[str, Any]], None] | None = None,
         gateway_interval_seconds: float = 1.0,
         subscriber_queue_size: int = 500,
     ) -> None:
         self.source_queue = source_queue
         self.gateway_state = gateway_state
         self.gateway_health_builder = gateway_health_builder
+        self.evidence_enqueue = evidence_enqueue
         self.gateway_interval_seconds = gateway_interval_seconds
         self.subscriber_queue_size = subscriber_queue_size
         self._subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
@@ -78,13 +80,16 @@ class HardwareStreamManager:
                 packet = None
 
             if packet is not None:
+                self._enqueue_evidence(packet)
                 await self._broadcast(packet)
                 continue
 
             loop_time = asyncio.get_running_loop().time()
 
             if loop_time >= next_gateway_health_at:
-                await self._broadcast(self.gateway_health_builder(self.gateway_state))
+                packet = self.gateway_health_builder(self.gateway_state)
+                self._enqueue_evidence(packet)
+                await self._broadcast(packet)
                 next_gateway_health_at = loop_time + self.gateway_interval_seconds
                 continue
 
@@ -94,7 +99,17 @@ class HardwareStreamManager:
             except asyncio.TimeoutError:
                 continue
 
+            self._enqueue_evidence(packet)
             await self._broadcast(packet)
+
+    def _enqueue_evidence(self, packet: dict[str, Any]) -> None:
+        if self.evidence_enqueue is None:
+            return
+        try:
+            self.evidence_enqueue(packet)
+        except Exception:
+            # Evidence logging is best-effort and must not interrupt telemetry.
+            pass
 
     async def _broadcast(self, packet: dict[str, Any]) -> None:
         async with self._subscribers_lock:
