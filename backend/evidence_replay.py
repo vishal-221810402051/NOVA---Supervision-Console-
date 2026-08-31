@@ -1,16 +1,92 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
+import re
+import sys
+from tempfile import NamedTemporaryFile
 from typing import Any
 
 
 PASS = "PASS"
 FAIL = "FAIL"
+
+REPLAY_ARTIFACT_SCHEMA_VERSION = "1.0"
+REPLAY_ARTIFACT_TYPE = "NOVA_SC_PERSISTENT_EVIDENCE_REPLAY_RESULT"
+REPLAY_ARTIFACT_GENERATOR = "backend.evidence_replay"
+REPLAY_ARTIFACT_VALIDATION_SCOPE = "BACKEND_PERSISTENT_EVIDENCE_OFFLINE_REPLAY"
+REPLAY_ARTIFACT_LIMITATIONS = (
+    "SHA-256 verification detects mismatch against recorded metadata but is not cryptographic attestation.",
+    "Replay validation does not prove tamper-proof storage.",
+    "Replay validation does not certify production archive readiness.",
+    "Replay validation does not validate frontend report integration.",
+    "Replay validation does not validate FRAM checkpoint storage.",
+    "Replay validation does not validate actuator or control readiness.",
+)
+REPLAY_ARTIFACT_NON_CLAIMS = {
+    "tamper_proof_storage": False,
+    "cryptographic_attestation": False,
+    "production_archive_certification": False,
+    "frontend_report_integration": False,
+    "fram_validation": False,
+    "actuator_control_readiness": False,
+    "clinical_readiness": False,
+}
+REPLAY_ARTIFACT_REQUIRED_FIELDS = (
+    "artifact_schema_version",
+    "artifact_type",
+    "generated_utc",
+    "generator",
+    "validation_scope",
+    "validation_status",
+    "persistent_replay_validated",
+    "replay_phase_id",
+    "replay_run_id",
+    "replay_target_run_dir",
+    "replay_started_utc",
+    "replay_completed_utc",
+    "replay_segment_count",
+    "replay_total_events",
+    "replay_summary_events_written",
+    "replay_writer_errors",
+    "replay_persistent_events_dropped",
+    "replay_malformed_lines",
+    "replay_segment_filename_continuity",
+    "replay_deterministic_order_verified",
+    "replay_hash_verified",
+    "replay_run_root_match",
+    "replay_run_root_sha256",
+    "replay_run_root_sha256_expected",
+    "replay_run_root_sha256_actual",
+    "replay_failure_reasons",
+    "replay_source_component_counts",
+    "replay_first_event_metadata",
+    "replay_last_event_metadata",
+    "replay_segments",
+    "replay_validation_limitations",
+    "non_claims",
+)
+REPLAY_ARTIFACT_SEGMENT_FIELDS = (
+    "filename",
+    "exists",
+    "byte_count_expected",
+    "byte_count_actual",
+    "sha256_expected",
+    "sha256_actual",
+    "hash_match",
+    "event_count_expected",
+    "event_count_actual",
+    "malformed_lines",
+    "first_event_metadata",
+    "last_event_metadata",
+    "failure_reasons",
+)
 
 
 def utc_now() -> str:
@@ -73,6 +149,246 @@ class EvidenceReplayResult:
             separators=None if pretty else (",", ":"),
             sort_keys=True,
         )
+
+
+def build_replay_result_artifact(
+    result: EvidenceReplayResult,
+) -> dict[str, object]:
+    expected_root = result.run_root_sha256_expected
+    actual_root = result.run_root_sha256_actual
+    verified_root = (
+        expected_root
+        if result.run_root_match
+        and expected_root is not None
+        and actual_root is not None
+        and expected_root == actual_root
+        else None
+    )
+
+    return {
+        "artifact_schema_version": REPLAY_ARTIFACT_SCHEMA_VERSION,
+        "artifact_type": REPLAY_ARTIFACT_TYPE,
+        "generated_utc": utc_now(),
+        "generator": REPLAY_ARTIFACT_GENERATOR,
+        "validation_scope": REPLAY_ARTIFACT_VALIDATION_SCOPE,
+        "validation_status": result.validation_status,
+        "persistent_replay_validated": (
+            result.validation_status == PASS and not result.failure_reasons
+        ),
+        "replay_phase_id": result.phase_id,
+        "replay_run_id": result.run_id,
+        "replay_target_run_dir": result.run_dir,
+        "replay_started_utc": result.replay_started_utc,
+        "replay_completed_utc": result.replay_completed_utc,
+        "replay_segment_count": result.segment_count,
+        "replay_total_events": result.total_events_replayed,
+        "replay_summary_events_written": result.summary_events_written,
+        "replay_writer_errors": result.writer_errors,
+        "replay_persistent_events_dropped": result.persistent_events_dropped,
+        "replay_malformed_lines": result.malformed_replay_lines,
+        "replay_segment_filename_continuity": result.segment_filename_continuity,
+        "replay_deterministic_order_verified": result.deterministic_order_verified,
+        "replay_hash_verified": result.hash_verified,
+        "replay_run_root_match": result.run_root_match,
+        "replay_run_root_sha256": verified_root,
+        "replay_run_root_sha256_expected": expected_root,
+        "replay_run_root_sha256_actual": actual_root,
+        "replay_failure_reasons": list(result.failure_reasons),
+        "replay_source_component_counts": dict(result.source_component_counts),
+        "replay_first_event_metadata": result.first_event_metadata,
+        "replay_last_event_metadata": result.last_event_metadata,
+        "replay_segments": [segment.to_dict() for segment in result.segments],
+        "replay_validation_limitations": list(REPLAY_ARTIFACT_LIMITATIONS),
+        "non_claims": dict(REPLAY_ARTIFACT_NON_CLAIMS),
+    }
+
+
+def validate_replay_artifact_dict(artifact: Mapping[str, object]) -> list[str]:
+    errors = [
+        f"MISSING_REQUIRED_FIELD:{field}"
+        for field in REPLAY_ARTIFACT_REQUIRED_FIELDS
+        if field not in artifact
+    ]
+    if errors:
+        return errors
+
+    if artifact["artifact_schema_version"] != REPLAY_ARTIFACT_SCHEMA_VERSION:
+        errors.append("INVALID_ARTIFACT_SCHEMA_VERSION")
+    if artifact["artifact_type"] != REPLAY_ARTIFACT_TYPE:
+        errors.append("INVALID_ARTIFACT_TYPE")
+    if artifact["generator"] != REPLAY_ARTIFACT_GENERATOR:
+        errors.append("INVALID_ARTIFACT_GENERATOR")
+    if artifact["validation_scope"] != REPLAY_ARTIFACT_VALIDATION_SCOPE:
+        errors.append("INVALID_VALIDATION_SCOPE")
+    if not isinstance(artifact["generated_utc"], str) or not artifact["generated_utc"]:
+        errors.append("INVALID_GENERATED_UTC")
+
+    status = artifact["validation_status"]
+    failure_reasons = artifact["replay_failure_reasons"]
+    if status not in {PASS, FAIL}:
+        errors.append("INVALID_VALIDATION_STATUS")
+    if not isinstance(failure_reasons, list) or not all(
+        isinstance(reason, str) for reason in failure_reasons
+    ):
+        errors.append("INVALID_REPLAY_FAILURE_REASONS")
+        failure_reasons = []
+
+    expected_validated = status == PASS and not failure_reasons
+    if artifact["persistent_replay_validated"] is not expected_validated:
+        errors.append("PERSISTENT_REPLAY_VALIDATED_INCONSISTENT")
+    if status == PASS and failure_reasons:
+        errors.append("PASS_WITH_FAILURE_REASONS")
+    if status == FAIL and not failure_reasons:
+        errors.append("FAIL_WITHOUT_FAILURE_REASONS")
+
+    expected_root = artifact["replay_run_root_sha256_expected"]
+    actual_root = artifact["replay_run_root_sha256_actual"]
+    root_match = artifact["replay_run_root_match"] is True
+    roots_equal = (
+        isinstance(expected_root, str)
+        and bool(expected_root)
+        and isinstance(actual_root, str)
+        and expected_root == actual_root
+    )
+    if root_match != roots_equal:
+        errors.append("REPLAY_RUN_ROOT_MATCH_INCONSISTENT")
+    canonical_root = expected_root if root_match and roots_equal else None
+    if artifact["replay_run_root_sha256"] != canonical_root:
+        errors.append("REPLAY_RUN_ROOT_SHA256_INCONSISTENT")
+
+    segments = artifact["replay_segments"]
+    segment_count = artifact["replay_segment_count"]
+    if not _is_int(segment_count) or segment_count < 0:
+        errors.append("INVALID_REPLAY_SEGMENT_COUNT")
+    if not isinstance(segments, list):
+        errors.append("INVALID_REPLAY_SEGMENTS")
+        segments = []
+    elif _is_int(segment_count) and segment_count != len(segments):
+        errors.append("REPLAY_SEGMENT_COUNT_MISMATCH")
+
+    for index, segment in enumerate(segments):
+        if not isinstance(segment, Mapping):
+            errors.append(f"INVALID_REPLAY_SEGMENT:{index}")
+            continue
+        for field in REPLAY_ARTIFACT_SEGMENT_FIELDS:
+            if field not in segment:
+                errors.append(f"MISSING_REPLAY_SEGMENT_FIELD:{index}:{field}")
+
+    if artifact["replay_validation_limitations"] != list(REPLAY_ARTIFACT_LIMITATIONS):
+        errors.append("INVALID_REPLAY_VALIDATION_LIMITATIONS")
+    if artifact["non_claims"] != REPLAY_ARTIFACT_NON_CLAIMS:
+        errors.append("INVALID_NON_CLAIMS")
+
+    if status == PASS:
+        required_true_fields = (
+            "replay_segment_filename_continuity",
+            "replay_deterministic_order_verified",
+            "replay_hash_verified",
+            "replay_run_root_match",
+        )
+        for field in required_true_fields:
+            if artifact[field] is not True:
+                errors.append(f"PASS_REQUIRES_TRUE:{field}")
+        if artifact["replay_writer_errors"] != 0:
+            errors.append("PASS_REQUIRES_ZERO_WRITER_ERRORS")
+        if artifact["replay_persistent_events_dropped"] != 0:
+            errors.append("PASS_REQUIRES_ZERO_PERSISTENT_DROPS")
+        if artifact["replay_malformed_lines"] != 0:
+            errors.append("PASS_REQUIRES_ZERO_MALFORMED_LINES")
+        if artifact["replay_total_events"] != artifact["replay_summary_events_written"]:
+            errors.append("PASS_REQUIRES_EVENT_COUNT_MATCH")
+
+    return errors
+
+
+def sanitize_replay_artifact_filename(
+    phase_id: str | None,
+    run_id: str | None,
+) -> str:
+    phase_component = _sanitize_artifact_filename_component(
+        phase_id,
+        fallback="UNKNOWN_PHASE",
+    )
+    run_component = _sanitize_artifact_filename_component(
+        run_id,
+        fallback="UNKNOWN_RUN",
+    )
+    return f"replay_result_{phase_component}_{run_component}.json"
+
+
+def write_replay_result_artifact(
+    result: EvidenceReplayResult,
+    output_path: str | Path,
+) -> Path:
+    resolved_output = Path(output_path).expanduser().resolve(strict=False)
+    _assert_output_outside_run_dir(result.run_dir, resolved_output)
+
+    artifact = build_replay_result_artifact(result)
+    validation_errors = validate_replay_artifact_dict(artifact)
+    if validation_errors:
+        raise ValueError(
+            "Replay result artifact validation failed: "
+            + ", ".join(validation_errors)
+        )
+
+    if resolved_output.exists() and resolved_output.is_dir():
+        raise ValueError(f"Replay artifact output path is a directory: {resolved_output}")
+
+    resolved_output.parent.mkdir(parents=True, exist_ok=True)
+    temp_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=resolved_output.parent,
+            prefix=f".{resolved_output.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            json.dump(artifact, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, resolved_output)
+        temp_path = None
+    finally:
+        if temp_path is not None:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    return resolved_output
+
+
+def _assert_output_outside_run_dir(
+    run_dir: str | Path,
+    output_path: str | Path,
+) -> None:
+    resolved_run_dir = Path(run_dir).expanduser().resolve(strict=False)
+    resolved_output = Path(output_path).expanduser().resolve(strict=False)
+    if resolved_output == resolved_run_dir or resolved_run_dir in resolved_output.parents:
+        raise ValueError(
+            "Replay artifact output must be outside the source evidence run directory: "
+            f"{resolved_run_dir}"
+        )
+
+
+def _sanitize_artifact_filename_component(
+    value: str | None,
+    *,
+    fallback: str,
+) -> str:
+    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "_", value or "")
+    sanitized = sanitized.strip(" ._")
+    if not sanitized:
+        return fallback
+    return sanitized[:96].rstrip(" ._") or fallback
+
+
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
 
 
 def compute_replay_run_root_sha256(segments: list[dict[str, Any]]) -> str:
@@ -628,6 +944,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="Print compact JSON")
     parser.add_argument("--pretty", action="store_true", help="Print indented JSON")
     parser.add_argument(
+        "--output",
+        help="Write a versioned replay-result artifact to this explicit JSON file path",
+    )
+    parser.add_argument(
         "--strict",
         action="store_true",
         help="Strict validation policy; currently the default behavior",
@@ -641,6 +961,12 @@ def main(argv: list[str] | None = None) -> int:
 
     result = replay_evidence_run(args.run_dir)
     print(result.to_json(pretty=args.pretty))
+    if args.output:
+        try:
+            write_replay_result_artifact(result, args.output)
+        except Exception as exc:
+            print(f"Replay result artifact write failed: {exc}", file=sys.stderr)
+            return 1
     return 0 if result.validation_status == PASS else 1
 
 

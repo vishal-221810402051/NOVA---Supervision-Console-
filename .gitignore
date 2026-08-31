@@ -39,3 +39,6 @@ project.checksum
 
 # NOVA SC runtime persistent evidence artifacts
 backend/evidence/
+
+# NOVA SC generated replay result artifacts
+backend/replay_results/
