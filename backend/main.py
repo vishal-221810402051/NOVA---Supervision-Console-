@@ -15,12 +15,18 @@ from gateway_state import GatewayState
 from protocol import (
     build_gateway_health_packet as build_hardware_gateway_health_packet,
 )
+from replay_result_loader import (
+    build_persistent_replay_error_summary,
+    load_persistent_replay_summary,
+    load_persistent_replay_summary_from_env,
+)
 from rtc_sync_ipc import RtcSyncIpcServer
 from rtc_sync_service import send_one_rtc_sync_request
 from serial_bridge import SerialBridge
 from hardware_stream_manager import HardwareStreamManager
 
 app = FastAPI(title="NOVA SC Backend", version="0.1.0")
+app.state.persistent_replay_summary = load_persistent_replay_summary(None, None, None)
 
 app.add_middleware(
     CORSMiddleware,
@@ -121,6 +127,13 @@ LINK_HEARTBEAT_COUNTERS = {
 @app.on_event("startup")
 async def startup():
     global serial_bridge, hardware_stream_manager, rtc_sync_ipc_server, evidence_writer
+    try:
+        app.state.persistent_replay_summary = load_persistent_replay_summary_from_env()
+    except Exception:
+        app.state.persistent_replay_summary = build_persistent_replay_error_summary(
+            artifact_selected=bool(os.getenv("NOVA_SC_REPLAY_RESULT_PATH", "").strip())
+        )
+
     if BACKEND_MODE != "hardware":
         hardware_gateway_state.set_serial_status(
             serial_connected=False,
@@ -195,6 +208,10 @@ def utc_now():
 
 def current_persistent_evidence_summary():
     return build_persistent_evidence_summary(evidence_writer)
+
+
+def current_persistent_replay_summary():
+    return app.state.persistent_replay_summary
 
 
 def build_hardware_gateway_health_packet_with_evidence(state: GatewayState):
@@ -446,6 +463,7 @@ def health():
         "last_esp32_sub_packet_utc": hardware_status["last_esp32_sub_packet_utc"],
         "last_error": hardware_status["last_error"],
         "persistent_evidence_summary": current_persistent_evidence_summary(),
+        "persistent_replay_summary": current_persistent_replay_summary(),
     }
 
 
