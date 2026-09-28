@@ -9,6 +9,8 @@ import type {
   HealthCheckRule,
   HealthState,
   PersistentEvidenceSummary,
+  PersistentReplayCapture,
+  PersistentReplaySummary,
   PowerHealthPayload,
   RtcDriftBaseline,
   RtcDriftEvidence,
@@ -34,13 +36,16 @@ import {
   deriveRtcValidity,
 } from "./rtcValidity";
 
+export const NOVA_SC_REPORT_VERSION = "v1.2" as const;
+export const NOVA_SC_REPORT_SCHEMA_VERSION = "v1.2" as const;
+
 export type NovaScValidationReport = {
   report_type: "NOVA_SC_SUPERVISORY_VALIDATION_REPORT";
-  report_version: "v1.1";
+  report_version: typeof NOVA_SC_REPORT_VERSION;
   generated_at_utc: string;
   report_metadata: {
     report_type: "NOVA_SC_SUPERVISORY_VALIDATION_REPORT";
-    report_schema_version: "v1.1";
+    report_schema_version: typeof NOVA_SC_REPORT_SCHEMA_VERSION;
     generated_at_utc: string;
     app_name: "NOVA SC";
     nova_sc_phase: "PHASE_6_9_HARDWARE_TELEMETRY_BASELINE";
@@ -196,6 +201,13 @@ export type NovaScValidationReport = {
   };
   rtc_drift_summary: RtcDriftEvidence;
   persistent_evidence_summary: PersistentEvidenceSummary;
+  persistent_replay_summary: PersistentReplaySummary | null;
+  persistent_replay_capture: {
+    report_data_status: PersistentReplayCapture["report_data_status"];
+    source: "BACKEND_HEALTH";
+    captured_at_utc: string;
+    error_reason: PersistentReplayCapture["error_reason"];
+  };
   expected_warnings: HealthCheckRule[];
   known_limitations: string[];
   disabled_features: string[];
@@ -219,6 +231,7 @@ export function buildNovaScValidationReport(params: {
   };
   gatewayHealth: GatewayHealthPayload | null;
   persistentEvidenceSummary: PersistentEvidenceSummary | null;
+  persistentReplayCapture: PersistentReplayCapture;
   powerHealth: PowerHealthPayload | null;
   rtcStatus: RtcStatusPayload | null;
   latestRtcStatusPacket: Extract<TelemetryPacket, { event_type: "RTC_STATUS_TELEMETRY" }> | null;
@@ -304,14 +317,17 @@ export function buildNovaScValidationReport(params: {
       null,
     eventStoreSummary: params.eventStoreSummary,
   });
+  const persistentReplayReportFields = buildPersistentReplayReportFields(
+    params.persistentReplayCapture
+  );
 
   return {
     report_type: "NOVA_SC_SUPERVISORY_VALIDATION_REPORT",
-    report_version: "v1.1",
+    report_version: NOVA_SC_REPORT_VERSION,
     generated_at_utc: generatedAtUtc,
     report_metadata: {
       report_type: "NOVA_SC_SUPERVISORY_VALIDATION_REPORT",
-      report_schema_version: "v1.1",
+      report_schema_version: NOVA_SC_REPORT_SCHEMA_VERSION,
       generated_at_utc: generatedAtUtc,
       app_name: "NOVA SC",
       nova_sc_phase: "PHASE_6_9_HARDWARE_TELEMETRY_BASELINE",
@@ -452,6 +468,7 @@ export function buildNovaScValidationReport(params: {
       eventStoreDroppedOldEvents: params.eventStoreDroppedOldEvents,
     }),
     persistent_evidence_summary: persistentEvidenceSummary,
+    ...persistentReplayReportFields,
     expected_warnings: healthCheck.rules.filter(
       (rule) =>
         rule.category === "EXPECTED_WARNING" || rule.rule_id.includes("FRAM")
@@ -461,6 +478,24 @@ export function buildNovaScValidationReport(params: {
     device_registry: params.deviceRegistry,
     recent_logs: params.logs.slice(0, 50),
     engineering_logs_recent: params.logs.slice(0, 50),
+  };
+}
+
+export function buildPersistentReplayReportFields(
+  capture: PersistentReplayCapture
+): Pick<
+  NovaScValidationReport,
+  "persistent_replay_summary" | "persistent_replay_capture"
+> {
+  return {
+    persistent_replay_summary:
+      capture.report_data_status === "AVAILABLE" ? capture.summary : null,
+    persistent_replay_capture: {
+      report_data_status: capture.report_data_status,
+      source: capture.source,
+      captured_at_utc: capture.captured_at_utc,
+      error_reason: capture.error_reason,
+    },
   };
 }
 
@@ -558,7 +593,7 @@ function buildDisabledFeatures() {
   ];
 }
 
-function buildPersistentEvidenceSummary(params: {
+export function buildPersistentEvidenceSummary(params: {
   backendSummary: PersistentEvidenceSummary | null;
   eventStoreSummary: EventStoreSummary;
 }): PersistentEvidenceSummary {

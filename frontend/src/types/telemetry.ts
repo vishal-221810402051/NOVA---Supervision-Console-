@@ -384,6 +384,77 @@ export type PersistentEvidenceSummary = {
   required_next_action: string;
 };
 
+export type ReplayValidationStatus = "PASS" | "FAIL" | "PENDING";
+
+export type PersistentReplayNonClaims = {
+  tamper_proof_storage: false;
+  cryptographic_attestation: false;
+  production_archive_certification: false;
+  frontend_report_integration: false;
+  fram_validation: false;
+  actuator_control_readiness: false;
+  clinical_readiness: false;
+};
+
+export type PersistentReplaySummary = {
+  summary_schema_version: "1.0";
+  replay_validation_status: ReplayValidationStatus;
+  persistent_replay_validated: boolean;
+  artifact_selected: boolean;
+  artifact_present: boolean;
+  artifact_valid: boolean | null;
+  artifact_schema_version: string | null;
+  artifact_type: string | null;
+  validation_scope: string | null;
+  artifact_reference: string | null;
+  phase_id: string | null;
+  run_id: string | null;
+  identity_bound: boolean;
+  run_identity_match: boolean | null;
+  phase_identity_match: boolean | null;
+  replay_result_generated_utc: string | null;
+  replay_started_utc: string | null;
+  replay_completed_utc: string | null;
+  summary_generated_utc: string;
+  segment_count: number | null;
+  total_events: number | null;
+  summary_events_written: number | null;
+  malformed_lines: number | null;
+  writer_errors: number | null;
+  persistent_events_dropped: number | null;
+  segment_filename_continuity: boolean | null;
+  deterministic_order_verified: boolean | null;
+  hash_verified: boolean | null;
+  run_root_match: boolean | null;
+  run_root_sha256: string | null;
+  failure_reasons: string[];
+  limitations: string[];
+  non_claims: PersistentReplayNonClaims;
+  required_next_action: string | null;
+};
+
+export type PersistentReplayCaptureErrorReason =
+  | "HEALTH_REQUEST_FAILED"
+  | "HEALTH_RESPONSE_INVALID"
+  | "REPLAY_SUMMARY_MISSING"
+  | "UNSUPPORTED_REPLAY_SUMMARY_SCHEMA";
+
+export type PersistentReplayCapture =
+  | {
+      report_data_status: "AVAILABLE";
+      source: "BACKEND_HEALTH";
+      captured_at_utc: string;
+      error_reason: null;
+      summary: PersistentReplaySummary;
+    }
+  | {
+      report_data_status: "REPORT_DATA_UNAVAILABLE";
+      source: "BACKEND_HEALTH";
+      captured_at_utc: string;
+      error_reason: PersistentReplayCaptureErrorReason;
+      summary: null;
+    };
+
 export type GatewayHealthPayload = {
   node_id: "pi_gateway";
   health_state: HealthState;
