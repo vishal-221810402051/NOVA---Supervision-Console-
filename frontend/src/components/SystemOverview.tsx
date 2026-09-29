@@ -1,57 +1,148 @@
+import type { ReactNode } from "react";
 import { useTelemetryStore } from "../store/telemetryStore";
-import { StatusBadge } from "./StatusBadge";
+import { MetricCard } from "./ui/MetricCard";
+import { SectionCard } from "./ui/SectionCard";
+import { StatusChip, type StatusTone } from "./ui/StatusChip";
 
 export function SystemOverview() {
   const data = useTelemetryStore((s) => s.systemHealth);
+  const isTelemetryStale = useTelemetryStore((s) => s.isTelemetryStale);
 
-  if (!data) return <Panel title="System Overview">Waiting for telemetry...</Panel>;
+  if (!data) {
+    return (
+      <SectionCard
+        title="System Overview"
+        description="Controller, network, and internal link status"
+      >
+        <p className="text-sm text-slate-400">Waiting for telemetry...</p>
+      </SectionCard>
+    );
+  }
 
   return (
-    <Panel title="System Overview">
-      <div className="grid grid-cols-4 gap-3">
-        <StatusBadge label="MAIN MCU" state={data.main_mcu.health_state} />
-        <StatusBadge label="SUB MCU" state={data.sub_mcu.health_state} />
-        <StatusBadge label="WiFi" state={data.wifi.connection_state} />
-        <StatusBadge label="MAIN / SUB UART" state={data.main_sub_uart.link_state} />
-      </div>
+    <SectionCard
+      title="System Overview"
+      description="Controller, network, and internal link status"
+    >
+      {isTelemetryStale && (
+        <div
+          role="status"
+          className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+        >
+          Data is delayed. Values below show the last known state.
+        </div>
+      )}
 
-      <div className="mt-4 grid grid-cols-4 gap-3 text-sm">
-        <Metric label="MAIN Heap" value={`${data.main_mcu.free_heap_bytes} B`} />
-        <Metric label="SUB Heap" value={`${data.sub_mcu.free_heap_bytes} B`} />
-        <Metric label="RSSI" value={`${data.wifi.rssi_dbm} dBm`} />
-        <Metric label="Latency" value={`${data.wifi.latency_ms} ms`} />
+      <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-3">
+        <OverviewGroup title="Controllers">
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+            <SystemStateCard
+              label="Main Controller"
+              state={data.main_mcu.health_state}
+              detailLabel="Free memory"
+              detailValue={`${data.main_mcu.free_heap_bytes} B`}
+            />
+            <SystemStateCard
+              label="Secondary Controller"
+              state={data.sub_mcu.health_state}
+              detailLabel="Free memory"
+              detailValue={`${data.sub_mcu.free_heap_bytes} B`}
+            />
+          </div>
+        </OverviewGroup>
+
+        <OverviewGroup title="Network">
+          <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
+            <span className="text-sm text-slate-400">Wi-Fi connection</span>
+            <StatusChip tone={toneForState(data.wifi.connection_state)}>
+              {humanizeState(data.wifi.connection_state)}
+            </StatusChip>
+          </div>
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+            <MetricCard label="Signal Strength" value={`${data.wifi.rssi_dbm} dBm`} />
+            <MetricCard label="Latency" value={`${data.wifi.latency_ms} ms`} />
+          </div>
+        </OverviewGroup>
+
+        <OverviewGroup title="Internal Link">
+          <SystemStateCard
+            label="Main to Secondary UART"
+            state={data.main_sub_uart.link_state}
+          />
+        </OverviewGroup>
       </div>
-    </Panel>
+    </SectionCard>
   );
 }
 
-function Panel({ title, children }: any) {
-  const isTelemetryStale = useTelemetryStore((s) => s.isTelemetryStale);
-
+function OverviewGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section
-      className={`border p-4 ${
-        isTelemetryStale
-          ? "border-amber-500/70 bg-amber-950/10 opacity-70"
-          : "border-slate-800 bg-slate-950"
-      }`}
-    >
-      <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-cyan-300">{title}</h2>
-      {isTelemetryStale && (
-        <div className="mb-3 border border-amber-500 bg-amber-950/30 px-3 py-2 text-xs font-bold uppercase tracking-widest text-amber-300">
-          STALE TELEMETRY - VALUES ARE LAST KNOWN STATE
-        </div>
-      )}
+    <section className="min-w-0 rounded-lg bg-slate-950/55 p-4">
+      <h3 className="mb-3 text-sm font-semibold text-slate-200">{title}</h3>
       {children}
     </section>
   );
 }
 
-function Metric({ label, value }: any) {
+function SystemStateCard({
+  label,
+  state,
+  detailLabel,
+  detailValue,
+}: {
+  label: string;
+  state: string;
+  detailLabel?: string;
+  detailValue?: string;
+}) {
   return (
-    <div className="border border-slate-800 bg-slate-900 p-3">
-      <div className="text-[10px] uppercase tracking-widest text-slate-500">{label}</div>
-      <div className="font-mono text-cyan-100">{value}</div>
+    <div className="min-w-0 rounded-md bg-slate-900/80 p-4">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-medium text-slate-300">{label}</span>
+        <StatusChip tone={toneForState(state)}>{humanizeState(state)}</StatusChip>
+      </div>
+      {detailLabel && detailValue && (
+        <div className="mt-3 min-w-0">
+          <div className="text-xs text-slate-500">{detailLabel}</div>
+          <div className="mt-0.5 break-words text-sm font-semibold text-slate-200">
+            {detailValue}
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function humanizeState(state: string) {
+  const labels: Record<string, string> = {
+    HEALTHY: "Healthy",
+    DEGRADED: "Needs attention",
+    FAIL_SAFE: "Fail-safe",
+    CONNECTED: "Connected",
+    RECONNECTING: "Reconnecting",
+    OFFLINE: "Offline",
+    LINK_HEALTHY: "Healthy",
+    LINK_DEGRADED: "Needs attention",
+    LINK_RECOVERING: "Recovering",
+    LINK_OFFLINE: "Offline",
+  };
+  return labels[state] ?? state;
+}
+
+function toneForState(state: string): StatusTone {
+  if (state === "HEALTHY" || state === "CONNECTED" || state === "LINK_HEALTHY") {
+    return "healthy";
+  }
+  if (
+    state === "DEGRADED" ||
+    state === "RECONNECTING" ||
+    state === "LINK_DEGRADED" ||
+    state === "LINK_RECOVERING"
+  ) {
+    return "attention";
+  }
+  if (state === "FAIL_SAFE" || state === "OFFLINE" || state === "LINK_OFFLINE") {
+    return "fault";
+  }
+  return "neutral";
 }
