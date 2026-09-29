@@ -13,71 +13,68 @@ import { HealthCheckPanel } from "./components/HealthCheckPanel";
 import { ReportExportPanel } from "./components/ReportExportPanel";
 import { TopologyView } from "./components/TopologyView";
 import { RtcStatus } from "./components/RtcStatus";
-
-type Page =
-  | "overview"
-  | "chips"
-  | "power"
-  | "rtc"
-  | "logs"
-  | "registry"
-  | "health"
-  | "report"
-  | "topology";
+import { PageHeader } from "./components/ui/PageHeader";
+import { StatusChip, type StatusTone } from "./components/ui/StatusChip";
+import { pageTitles, type Page } from "./presentation/navigation";
 
 export default function App() {
   useTelemetrySocket();
 
   const [activePage, setActivePage] = useState<Page>("overview");
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const connectionState = useTelemetryStore((s) => s.connectionState);
+  const connectionPresentation = presentConnectionState(connectionState);
 
   return (
     <div className="flex min-h-screen bg-slate-950 text-slate-100">
-      <Sidebar activePage={activePage} setActivePage={setActivePage} />
+      <Sidebar
+        activePage={activePage}
+        setActivePage={setActivePage}
+        mobileOpen={mobileNavigationOpen}
+        onCloseMobile={() => setMobileNavigationOpen(false)}
+      />
 
-      <div className="flex flex-1 flex-col">
-        <header className="border-b border-slate-800 bg-black px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold tracking-widest text-cyan-300">
-                NOVA SC / PHASE 6.9
-              </h1>
-              <p className="text-xs uppercase tracking-widest text-slate-500">
-                Hardware Telemetry Baseline
-              </p>
-            </div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <PageHeader
+          title={pageTitles[activePage]}
+          onOpenNavigation={() => setMobileNavigationOpen(true)}
+          navigationOpen={mobileNavigationOpen}
+          status={
+            <StatusChip tone={connectionPresentation.tone}>
+              {connectionPresentation.label}
+            </StatusChip>
+          }
+        />
 
-            <div className="text-right font-mono text-xs">
-              <div
-                className={
-                  connectionState === "CONNECTED"
-                    ? "text-emerald-300"
-                    : connectionState === "RECONNECTING"
-                      ? "text-amber-300"
-                      : "text-red-300"
-                }
-              >
-                WS: {connectionState}
-              </div>
-            </div>
+        <main className="min-w-0 flex-1 px-4 py-5 sm:px-5 lg:px-6 lg:py-6">
+          <div className="mx-auto grid w-full max-w-[1800px] min-w-0 gap-4">
+            <GlobalStatusBar />
+            {activePage === "overview" && <TelemetryStats />}
+
+            {activePage === "overview" && <SystemOverview />}
+            {activePage === "topology" && <TopologyView />}
+            {activePage === "chips" && <ChipStatus />}
+            {activePage === "power" && <PowerHealth />}
+            {activePage === "rtc" && <RtcStatus />}
+            {activePage === "logs" && <EngineeringLogs />}
+            {activePage === "registry" && <DeviceRegistryPanel />}
+            {activePage === "health" && <HealthCheckPanel />}
+            {activePage === "report" && <ReportExportPanel />}
           </div>
-        </header>
-
-        <main className="grid gap-4 p-6">
-          <GlobalStatusBar />
-          {activePage === "overview" && <TelemetryStats />}
-
-          {activePage === "overview" && <SystemOverview />}
-          {activePage === "topology" && <TopologyView />}
-          {activePage === "chips" && <ChipStatus />}
-          {activePage === "power" && <PowerHealth />}
-          {activePage === "rtc" && <RtcStatus />}
-          {activePage === "logs" && <EngineeringLogs />}
-          {activePage === "registry" && <DeviceRegistryPanel />}
-          {activePage === "health" && <HealthCheckPanel />}
-          {activePage === "report" && <ReportExportPanel />}
         </main>
       </div>
     </div>
   );
+}
+
+function presentConnectionState(state: string): {
+  label: string;
+  tone: StatusTone;
+} {
+  if (state === "CONNECTED") return { label: "Connected", tone: "healthy" };
+  if (state === "RECONNECTING") {
+    return { label: "Reconnecting", tone: "attention" };
+  }
+  if (state === "OFFLINE") return { label: "Offline", tone: "fault" };
+  return { label: state, tone: "neutral" };
 }

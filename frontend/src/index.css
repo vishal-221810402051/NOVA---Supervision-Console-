@@ -2,7 +2,28 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  min-height: 100%;
+  background: #020617;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
+  min-width: 320px;
+  min-height: 100%;
   background: #020617;
+  color: #f1f5f9;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
 }
