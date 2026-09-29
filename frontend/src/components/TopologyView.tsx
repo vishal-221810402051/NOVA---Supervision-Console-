@@ -1,25 +1,33 @@
 import { useTelemetryStore } from "../store/telemetryStore";
 import type { DeviceRegistryEntry } from "../types/telemetry";
 import { isAcceptedNodeId, normalizeNodeId } from "../types/telemetry";
+import { MetricCard } from "./ui/MetricCard";
+import { ResponsiveMetricGrid } from "./ui/ResponsiveMetricGrid";
+import { SectionCard } from "./ui/SectionCard";
+import { StatusChip, type StatusTone } from "./ui/StatusChip";
 
 type Severity = "healthy" | "warning" | "critical" | "neutral";
 
-const nodeMeta: Record<string, { label: string; role: string }> = {
+const nodeMeta: Record<string, { label: string; role: string; rawRole: string }> = {
   laptop_console: {
-    label: "Laptop Console",
-    role: "SUPERVISION_CONSOLE",
+    label: "Operator Console",
+    role: "Supervision interface",
+    rawRole: "SUPERVISION_CONSOLE",
   },
   pi_gateway: {
-    label: "Pi Gateway",
-    role: "GATEWAY",
+    label: "Gateway",
+    role: "Telemetry gateway",
+    rawRole: "GATEWAY",
   },
   esp32_main: {
-    label: "MAIN ESP32-S3",
-    role: "MOTION_CONTROL",
+    label: "Main Controller",
+    role: "Primary telemetry processor",
+    rawRole: "MOTION_CONTROL",
   },
   esp32_sub: {
-    label: "SUB ESP32-S3",
-    role: "SAFETY_QC",
+    label: "Secondary Controller",
+    role: "Secondary telemetry processor",
+    rawRole: "SAFETY_QC",
   },
 };
 
@@ -40,13 +48,11 @@ export function TopologyView() {
   const links = Object.values(linkRegistry);
   const getNode = (nodeId: string) => {
     const canonicalNodeId = isAcceptedNodeId(nodeId) ? normalizeNodeId(nodeId) : nodeId;
-    return (
-    Object.values(deviceRegistry).find(
+    return Object.values(deviceRegistry).find(
       (device) =>
         device.device_id === canonicalNodeId ||
         device.node_id === canonicalNodeId ||
         (isAcceptedNodeId(device.node_id) && normalizeNodeId(device.node_id) === canonicalNodeId)
-    )
     );
   };
 
@@ -66,7 +72,7 @@ export function TopologyView() {
   });
 
   return (
-    <section className="grid gap-4">
+    <section className="grid min-w-0 gap-4">
       <TopologySummaryStrip
         chainHealth={chainHealth}
         linksHealthy={`${linkRegistrySummary.healthy}/${linkRegistrySummary.total}`}
@@ -86,9 +92,9 @@ export function TopologyView() {
         linkMainSub={linkRegistry.link_main_sub}
       />
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <section className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
         <GatewayHealthCard gatewayHealth={gatewayHealth} />
-        <MiniIntegrityPanel
+        <DataIntegrityPanel
           activeStreamId={activeStreamId}
           packetRateHz={packetRateHz}
           isTelemetryStale={isTelemetryStale}
@@ -118,13 +124,22 @@ function TopologySummaryStrip({
   packetIntegrity: string;
 }) {
   return (
-    <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
-      <StatusPill label="Chain Health" value={chainHealth} state={chainHealth} />
-      <StatusPill label="Links Healthy" value={linksHealthy} state={linksHealthy.startsWith("3/") ? "HEALTHY" : "DEGRADED"} />
-      <StatusPill label="Links Synced" value={linksSynced} state={linksSynced.startsWith("3/") ? "SYNCED" : "UNKNOWN"} />
-      <StatusPill label="Telemetry Freshness" value={telemetryFreshness} state={telemetryFreshness} />
-      <StatusPill label="Packet Integrity" value={packetIntegrity} state={packetIntegrity} />
+    <section className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <SummaryCard label="System Path" value={humanizeState(chainHealth)} state={chainHealth} />
+      <SummaryCard label="Healthy Links" value={linksHealthy} state={linksHealthy.startsWith("3/") ? "HEALTHY" : "DEGRADED"} />
+      <SummaryCard label="Synchronized Links" value={linksSynced} state={linksSynced.startsWith("3/") ? "SYNCED" : "UNKNOWN"} />
+      <SummaryCard label="Data Status" value={telemetryFreshness === "LIVE" ? "Live" : "Delayed"} state={telemetryFreshness} />
+      <SummaryCard label="Data Integrity" value={humanizeState(packetIntegrity)} state={packetIntegrity} />
     </section>
+  );
+}
+
+function SummaryCard({ label, value, state }: { label: string; value: string; state: string }) {
+  return (
+    <MetricCard
+      label={label}
+      value={<StatusChip tone={toneForState(state)}>{value}</StatusChip>}
+    />
   );
 }
 
@@ -148,20 +163,12 @@ function TopologyChain({
   linkMainSub: LinkCardData;
 }) {
   return (
-    <section className="border border-slate-800 bg-slate-950 p-4">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-bold uppercase tracking-widest text-cyan-300">
-            Mission Topology Chain
-          </h2>
-          <p className="text-xs uppercase tracking-widest text-slate-500">
-            Laptop / Pi Gateway / MAIN / SUB
-          </p>
-        </div>
-        <StatusPill label="WS State" value={connectionState} state={connectionState} />
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_0.9fr_1fr_0.9fr_1fr_0.9fr_1fr]">
+    <SectionCard
+      title="System Communication Path"
+      description="Operator console to gateway and telemetry processors"
+      action={<StatusChip tone={toneForState(connectionState)}>{humanizeState(connectionState)}</StatusChip>}
+    >
+      <div className="grid min-w-0 grid-cols-1 gap-3 [min-width:1366px]:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,1fr)]">
         <NodeCard nodeId="laptop_console" device={laptop} connectionState={connectionState} />
         <LinkCard link={linkLaptopPi} />
         <NodeCard nodeId="pi_gateway" device={piGateway} />
@@ -170,7 +177,7 @@ function TopologyChain({
         <LinkCard link={linkMainSub} />
         <NodeCard nodeId="esp32_sub" device={sub} />
       </div>
-    </section>
+    </SectionCard>
   );
 }
 
@@ -183,49 +190,48 @@ function NodeCard({
   device: DeviceRegistryEntry | undefined;
   connectionState?: string;
 }) {
-  const meta = nodeMeta[nodeId] ?? { label: nodeId, role: "UNKNOWN" };
+  const meta = nodeMeta[nodeId] ?? { label: nodeId, role: "Unknown role", rawRole: "UNKNOWN" };
   const fallbackHealth =
-    nodeId === "laptop_console" && connectionState === "CONNECTED"
-      ? "HEALTHY"
-      : "OFFLINE";
+    nodeId === "laptop_console" && connectionState === "CONNECTED" ? "HEALTHY" : "OFFLINE";
   const healthState = device?.health_state ?? fallbackHealth;
   const statusMessage =
     device?.status_message ??
     (nodeId === "laptop_console" && connectionState === "CONNECTED"
       ? "Console connected to telemetry stream"
       : "Awaiting node health");
-  const version = getVersionText(device);
 
   return (
-    <article className={`border bg-black p-4 ${borderClass(healthState)}`}>
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <div className="text-sm font-bold uppercase tracking-widest text-cyan-100">
-            {meta.label}
-          </div>
-          <div className="font-mono text-xs text-slate-500">{nodeId}</div>
+    <article className={`min-w-0 rounded-md border bg-slate-950/80 p-4 ${borderClass(healthState)}`}>
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="break-words text-sm font-semibold text-slate-100">{meta.label}</h3>
+          <p className="mt-1 break-words text-xs text-slate-400">{meta.role}</p>
         </div>
-        <StatusPill label="Health" value={healthState} state={healthState} />
+        <StatusChip tone={toneForState(healthState)} className="shrink-0">
+          {humanizeState(healthState)}
+        </StatusChip>
       </div>
 
-      <div className="grid gap-2">
-        <MetricTile label="Role" value={meta.role} />
-        <MetricTile
-          label="Heartbeat Age"
-          value={
-            device?.heartbeat_age_ms === null || device?.heartbeat_age_ms === undefined
-              ? "-"
-              : `${Math.round(device.heartbeat_age_ms)} ms`
-          }
+      <dl className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2 [min-width:1366px]:grid-cols-1">
+        <CompactMetric
+          label="Heartbeat"
+          value={device?.heartbeat_age_ms == null ? "Not available" : `${Math.round(device.heartbeat_age_ms)} ms ago`}
         />
-        <MetricTile label="Version" value={version} />
-        <div>
-          <div className="text-xs uppercase tracking-widest text-slate-500">
-            Status
-          </div>
-          <div className="text-sm text-slate-300">{statusMessage}</div>
-        </div>
-      </div>
+        <CompactMetric label="Version" value={getVersionText(device)} />
+      </dl>
+
+      <p className="mt-4 break-words text-sm text-slate-300">{statusMessage}</p>
+
+      <details className="mt-4 border-t border-slate-800 pt-3 text-xs">
+        <summary className="cursor-pointer rounded-sm font-medium text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
+          Technical details
+        </summary>
+        <dl className="mt-3 grid min-w-0 gap-2 text-slate-400">
+          <TechnicalRow label="Node ID" value={nodeId} />
+          <TechnicalRow label="Raw role" value={meta.rawRole} />
+          <TechnicalRow label="Raw health" value={healthState} />
+        </dl>
+      </details>
     </article>
   );
 }
@@ -246,47 +252,39 @@ function LinkCard({ link }: { link: LinkCardData }) {
   const severity = getLinkSeverity(link);
 
   return (
-    <article className={`border bg-slate-900 p-4 ${severityBorderClass(severity)}`}>
-      <div className="mb-3 flex items-center gap-2">
+    <article className={`min-w-0 rounded-md border bg-slate-900/75 p-4 ${severityBorderClass(severity)}`}>
+      <div className="flex min-w-0 items-start gap-3">
         <HeartbeatDot state={link.link_state} />
-        <div>
-          <div className="text-sm font-bold uppercase tracking-widest text-slate-200">
-            {link.display_name}
-          </div>
-          <div className="font-mono text-xs text-slate-500">{link.link_id}</div>
+        <div className="min-w-0 flex-1">
+          <h3 className="break-words text-sm font-semibold text-slate-100">{link.display_name}</h3>
+          <p className="mt-1 text-xs text-slate-400">Communication link</p>
         </div>
       </div>
 
-      <div className="grid gap-2">
-        <div className="grid grid-cols-2 gap-2">
-          <StatusPill label="Link" value={link.link_state} state={link.link_state} />
-          <StatusPill label="Sync" value={link.sync_state} state={link.sync_state} />
-        </div>
-        <MetricTile label="Transport" value={link.transport} />
-        <MetricTile
-          label="Latency"
-          value={
-            link.round_trip_latency_ms === null
-              ? "-"
-              : `${link.round_trip_latency_ms} ms`
-          }
-        />
-        <MetricTile
-          label="Heartbeat Age"
-          value={
-            link.heartbeat_age_ms === null
-              ? "-"
-              : `${Math.round(link.heartbeat_age_ms)} ms`
-          }
-        />
-        <MetricTile label="Missed Heartbeats" value={link.missed_heartbeat_count.toString()} />
-        <div>
-          <div className="text-xs uppercase tracking-widest text-slate-500">
-            Status
-          </div>
-          <div className="text-sm text-slate-300">{link.status_message}</div>
-        </div>
+      <div className="mt-4 flex min-w-0 flex-wrap gap-2">
+        <StatusChip tone={toneForState(link.link_state)}>{humanizeState(link.link_state)}</StatusChip>
+        <StatusChip tone={toneForState(link.sync_state)}>{humanizeState(link.sync_state)}</StatusChip>
       </div>
+
+      <dl className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2 [min-width:1366px]:grid-cols-1">
+        <CompactMetric label="Latency" value={link.round_trip_latency_ms == null ? "Not available" : `${link.round_trip_latency_ms} ms`} />
+        <CompactMetric label="Heartbeat" value={link.heartbeat_age_ms == null ? "Not available" : `${Math.round(link.heartbeat_age_ms)} ms ago`} />
+      </dl>
+
+      <p className="mt-4 break-words text-sm text-slate-300">{link.status_message}</p>
+
+      <details className="mt-4 border-t border-slate-800 pt-3 text-xs">
+        <summary className="cursor-pointer rounded-sm font-medium text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
+          Technical details
+        </summary>
+        <dl className="mt-3 grid min-w-0 gap-2 text-slate-400">
+          <TechnicalRow label="Link ID" value={link.link_id} />
+          <TechnicalRow label="Transport" value={link.transport} />
+          <TechnicalRow label="Raw link state" value={link.link_state} />
+          <TechnicalRow label="Raw sync state" value={link.sync_state} />
+          <TechnicalRow label="Missed heartbeats" value={link.missed_heartbeat_count.toString()} />
+        </dl>
+      </details>
     </article>
   );
 }
@@ -308,68 +306,35 @@ function GatewayHealthCard({
     | null;
 }) {
   return (
-    <section className="border border-slate-800 bg-slate-950 p-4">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-bold uppercase tracking-widest text-cyan-300">
-            Gateway Health
-          </h2>
-          <p className="text-xs uppercase tracking-widest text-slate-500">
-            Gateway Telemetry
-          </p>
-        </div>
-        <StatusPill
-          label="Pi Gateway"
-          value={gatewayHealth?.health_state ?? "OFFLINE"}
-          state={gatewayHealth?.health_state ?? "OFFLINE"}
-        />
-      </div>
-
+    <SectionCard
+      title="Gateway Health"
+      description="Telemetry gateway resources and delivery state"
+      action={
+        <StatusChip tone={toneForState(gatewayHealth?.health_state ?? "OFFLINE")}>
+          {humanizeState(gatewayHealth?.health_state ?? "OFFLINE")}
+        </StatusChip>
+      }
+    >
       {gatewayHealth ? (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <MetricTile label="Uptime" value={formatDuration(gatewayHealth.uptime_ms)} />
-          <MetricTile
-            label="CPU"
-            value={`${gatewayHealth.cpu_percent}%`}
-            severity={metricSeverity(gatewayHealth.cpu_percent, 70, 85)}
-          />
-          <MetricTile
-            label="Memory"
-            value={`${gatewayHealth.memory_used_percent}%`}
-            severity={metricSeverity(gatewayHealth.memory_used_percent, 75, 90)}
-          />
-          <MetricTile
-            label="Disk"
-            value={`${gatewayHealth.disk_used_percent}%`}
-            severity={metricSeverity(gatewayHealth.disk_used_percent, 80, 90)}
-          />
-          <MetricTile
-            label="Buffer Depth"
-            value={gatewayHealth.buffer_depth.toString()}
-            severity={metricSeverity(gatewayHealth.buffer_depth, 11, 50)}
-          />
-          <MetricTile
-            label="Dropped Packets"
-            value={gatewayHealth.dropped_packets.toString()}
-            severity={gatewayHealth.dropped_packets > 0 ? "warning" : "healthy"}
-          />
-          <div className="md:col-span-2">
-            <div className="text-xs uppercase tracking-widest text-slate-500">
-              Status
-            </div>
-            <div className="text-sm text-slate-300">{gatewayHealth.status_message}</div>
-          </div>
-        </div>
+        <>
+          <ResponsiveMetricGrid className="xl:grid-cols-3">
+            <MetricCard label="Uptime" value={formatDuration(gatewayHealth.uptime_ms)} />
+            <MetricCard label="CPU" value={`${gatewayHealth.cpu_percent}%`} className={metricClass(metricSeverity(gatewayHealth.cpu_percent, 70, 85))} />
+            <MetricCard label="Memory" value={`${gatewayHealth.memory_used_percent}%`} className={metricClass(metricSeverity(gatewayHealth.memory_used_percent, 75, 90))} />
+            <MetricCard label="Disk" value={`${gatewayHealth.disk_used_percent}%`} className={metricClass(metricSeverity(gatewayHealth.disk_used_percent, 80, 90))} />
+            <MetricCard label="Buffer Depth" value={gatewayHealth.buffer_depth.toString()} className={metricClass(metricSeverity(gatewayHealth.buffer_depth, 11, 50))} />
+            <MetricCard label="Dropped Packets" value={gatewayHealth.dropped_packets.toString()} className={metricClass(gatewayHealth.dropped_packets > 0 ? "warning" : "healthy")} />
+          </ResponsiveMetricGrid>
+          <p className="mt-4 break-words text-sm text-slate-300">{gatewayHealth.status_message}</p>
+        </>
       ) : (
-        <div className="text-sm text-slate-500">
-          Waiting for gateway health telemetry...
-        </div>
+        <p className="text-sm text-slate-400">Waiting for gateway health telemetry...</p>
       )}
-    </section>
+    </SectionCard>
   );
 }
 
-function MiniIntegrityPanel({
+function DataIntegrityPanel({
   activeStreamId,
   packetRateHz,
   isTelemetryStale,
@@ -387,113 +352,92 @@ function MiniIntegrityPanel({
   streamSwitches: number;
 }) {
   return (
-    <section className="border border-slate-800 bg-slate-950 p-4">
-      <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-cyan-300">
-        Stream Integrity Compact
-      </h2>
+    <SectionCard
+      title="Data Integrity"
+      description="Live stream quality and ordering counters"
+      action={
+        <StatusChip tone={isTelemetryStale ? "attention" : "healthy"}>
+          {isTelemetryStale ? "Delayed" : "Live"}
+        </StatusChip>
+      }
+    >
+      <ResponsiveMetricGrid className="xl:grid-cols-3">
+        <MetricCard label="Packet Rate" value={`${packetRateHz.toFixed(2)} Hz`} />
+        <MetricCard label="Duplicate Packets" value={duplicatePackets.toString()} className={metricClass(duplicatePackets > 0 ? "warning" : "healthy")} />
+        <MetricCard label="Out-of-Order" value={outOfOrderPackets.toString()} className={metricClass(outOfOrderPackets > 0 ? "critical" : "healthy")} />
+        <MetricCard label="Sequence Gaps" value={sequenceGaps.toString()} className={metricClass(sequenceGaps > 0 ? "warning" : "healthy")} />
+        <MetricCard label="Stream Switches" value={streamSwitches.toString()} className={metricClass(streamSwitches > 0 ? "warning" : "healthy")} />
+      </ResponsiveMetricGrid>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <MetricTile label="Active Stream" value={shortStreamId(activeStreamId)} />
-        <MetricTile label="Packet Rate" value={`${packetRateHz.toFixed(2)} Hz`} />
-        <StatusPill
-          label="Freshness"
-          value={isTelemetryStale ? "STALE" : "LIVE"}
-          state={isTelemetryStale ? "STALE" : "LIVE"}
-        />
-        <MetricTile
-          label="Duplicate Packets"
-          value={duplicatePackets.toString()}
-          severity={duplicatePackets > 0 ? "warning" : "healthy"}
-        />
-        <MetricTile
-          label="Out-of-Order"
-          value={outOfOrderPackets.toString()}
-          severity={outOfOrderPackets > 0 ? "critical" : "healthy"}
-        />
-        <MetricTile
-          label="Sequence Gaps"
-          value={sequenceGaps.toString()}
-          severity={sequenceGaps > 0 ? "warning" : "healthy"}
-        />
-        <MetricTile
-          label="Stream Switches"
-          value={streamSwitches.toString()}
-          severity={streamSwitches > 0 ? "warning" : "healthy"}
-        />
-      </div>
-    </section>
+      <details className="mt-4 border-t border-slate-800 pt-3 text-xs">
+        <summary className="cursor-pointer rounded-sm font-medium text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
+          Technical details
+        </summary>
+        <dl className="mt-3 grid min-w-0 gap-2 text-slate-400">
+          <TechnicalRow label="Active stream" value={activeStreamId ?? "N/A"} />
+          <TechnicalRow label="Raw freshness" value={isTelemetryStale ? "STALE" : "LIVE"} />
+        </dl>
+      </details>
+    </SectionCard>
   );
 }
 
 function DetailedLinkRegistry({ links }: { links: LinkCardData[] }) {
   return (
-    <section className="border border-slate-800 bg-slate-950 p-4">
-      <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-cyan-300">
-        Detailed Link Registry
-      </h2>
-
-      <div className="grid gap-2">
+    <SectionCard title="Connection Details" description="Per-link synchronization, latency, and heartbeat evidence">
+      <div className="grid min-w-0 gap-3">
         {links.map((link) => (
-          <div
-            key={link.link_id}
-            className={`grid grid-cols-1 gap-2 border bg-slate-900 p-3 text-sm md:grid-cols-4 xl:grid-cols-8 ${severityBorderClass(getLinkSeverity(link))}`}
-          >
-            <div>
-              <div className="font-semibold text-cyan-100">{link.display_name}</div>
-              <div className="font-mono text-xs text-slate-500">{link.link_id}</div>
+          <article key={link.link_id} className={`min-w-0 rounded-md border bg-slate-900/70 p-4 ${severityBorderClass(getLinkSeverity(link))}`}>
+            <div className="grid min-w-0 gap-4 [min-width:1366px]:grid-cols-[minmax(12rem,1.4fr)_repeat(4,minmax(8rem,0.7fr))] [min-width:1366px]:items-center">
+              <div className="min-w-0">
+                <h3 className="break-words text-sm font-semibold text-slate-100">{link.display_name}</h3>
+                <p className="mt-1 break-words text-xs text-slate-400">{link.status_message}</p>
+              </div>
+              <LabeledStatus label="Link state" value={link.link_state} />
+              <LabeledStatus label="Synchronization" value={link.sync_state} />
+              <CompactMetric label="Latency" value={link.round_trip_latency_ms == null ? "Not available" : `${link.round_trip_latency_ms} ms`} />
+              <CompactMetric label="Heartbeat" value={link.heartbeat_age_ms == null ? "Not available" : `${Math.round(link.heartbeat_age_ms)} ms ago`} />
             </div>
-            <div className="text-slate-400">{link.transport}</div>
-            <StatusPill label="Link" value={link.link_state} state={link.link_state} />
-            <StatusPill label="Sync" value={link.sync_state} state={link.sync_state} />
-            <div className="font-mono text-slate-400">
-              {link.round_trip_latency_ms === null ? "-" : `${link.round_trip_latency_ms} ms`}
-            </div>
-            <div className="font-mono text-slate-400">
-              {link.heartbeat_age_ms === null ? "-" : `${Math.round(link.heartbeat_age_ms)} ms`}
-            </div>
-            <div className="font-mono text-slate-400">
-              missed={link.missed_heartbeat_count}
-            </div>
-            <div className="text-slate-400">{link.status_message}</div>
-          </div>
+            <details className="mt-4 border-t border-slate-800 pt-3 text-xs">
+              <summary className="cursor-pointer rounded-sm font-medium text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
+                Technical details
+              </summary>
+              <dl className="mt-3 grid min-w-0 gap-2 text-slate-400 sm:grid-cols-2 lg:grid-cols-3">
+                <TechnicalRow label="Link ID" value={link.link_id} />
+                <TechnicalRow label="Transport" value={link.transport} />
+                <TechnicalRow label="Missed heartbeats" value={link.missed_heartbeat_count.toString()} />
+              </dl>
+            </details>
+          </article>
         ))}
       </div>
-    </section>
+    </SectionCard>
   );
 }
 
-function StatusPill({
-  label,
-  value,
-  state,
-}: {
-  label: string;
-  value: string;
-  state: string;
-}) {
+function LabeledStatus({ label, value }: { label: string; value: string }) {
   return (
-    <div className={`border px-3 py-2 ${stateClass(state)}`}>
-      <div className="text-xs uppercase tracking-widest opacity-80">{label}</div>
-      <div className="font-mono text-sm font-bold">{value}</div>
+    <div className="min-w-0">
+      <div className="mb-1 text-xs font-medium text-slate-500">{label}</div>
+      <StatusChip tone={toneForState(value)}>{humanizeState(value)}</StatusChip>
     </div>
   );
 }
 
-function MetricTile({
-  label,
-  value,
-  severity = "neutral",
-}: {
-  label: string;
-  value: string;
-  severity?: Severity;
-}) {
+function CompactMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className={`border bg-slate-900 p-3 ${metricClass(severity)}`}>
-      <div className="text-xs uppercase tracking-widest text-slate-500">
-        {label}
-      </div>
-      <div className="font-mono text-sm text-cyan-100">{value}</div>
+    <div className="min-w-0">
+      <dt className="text-xs font-medium text-slate-500">{label}</dt>
+      <dd className="mt-1 break-words text-sm font-medium text-slate-200">{value}</dd>
+    </div>
+  );
+}
+
+function TechnicalRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] gap-2">
+      <dt className="text-slate-500">{label}</dt>
+      <dd className="break-words font-mono text-slate-300">{value}</dd>
     </div>
   );
 }
@@ -508,9 +452,9 @@ function HeartbeatDot({ state }: { state: string }) {
         : "bg-red-400";
 
   return (
-    <span className="relative flex h-3 w-3">
+    <span className="relative mt-1 flex h-3 w-3 shrink-0">
       {pulse && (
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-40" />
+        <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-40 motion-safe:animate-ping" />
       )}
       <span className={`relative inline-flex h-3 w-3 rounded-full ${color}`} />
     </span>
@@ -600,17 +544,51 @@ function metricSeverity(value: number, warningAt: number, criticalAt: number): S
   return "healthy";
 }
 
-function shortStreamId(streamId: string | null) {
-  if (!streamId) return "N/A";
-  return streamId.length > 20 ? `${streamId.slice(0, 20)}...` : streamId;
-}
-
 function formatDuration(ms: number) {
   const seconds = Math.floor(ms / 1000);
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
   return `${minutes}m ${remainingSeconds}s`;
+}
+
+function humanizeState(state: string) {
+  const labels: Record<string, string> = {
+    HEALTHY: "Healthy",
+    DEGRADED: "Needs attention",
+    OFFLINE: "Offline",
+    FAIL_SAFE: "Fail-safe",
+    CONNECTED: "Connected",
+    CONNECTING: "Connecting",
+    RECONNECTING: "Reconnecting",
+    LIVE: "Live",
+    STALE: "Delayed",
+    SYNCED: "Synchronized",
+    DESYNCED: "Not synchronized",
+    UNKNOWN: "Unknown",
+    LINK_HEALTHY: "Healthy",
+    LINK_DEGRADED: "Needs attention",
+    LINK_RECOVERING: "Recovering",
+    LINK_OFFLINE: "Offline",
+    CLEAN: "Clean",
+    WARNING: "Needs attention",
+    ERROR: "Error",
+  };
+
+  return labels[state] ?? state;
+}
+
+function toneForState(state: string): StatusTone {
+  if (["HEALTHY", "CONNECTED", "LIVE", "SYNCED", "LINK_HEALTHY", "CLEAN"].includes(state)) {
+    return "healthy";
+  }
+  if (["DEGRADED", "RECONNECTING", "STALE", "LINK_DEGRADED", "LINK_RECOVERING", "WARNING"].includes(state)) {
+    return "attention";
+  }
+  if (["FAIL_SAFE", "OFFLINE", "DESYNCED", "LINK_OFFLINE", "ERROR"].includes(state)) {
+    return "fault";
+  }
+  return "neutral";
 }
 
 function borderClass(state: string) {
@@ -628,45 +606,8 @@ function severityBorderClass(severity: Severity) {
 }
 
 function metricClass(severity: Severity) {
-  if (severity === "healthy") return "border-emerald-500/40";
-  if (severity === "warning") return "border-amber-500/60";
-  if (severity === "critical") return "border-red-500/70";
-  return "border-slate-800";
-}
-
-function stateClass(state: string) {
-  if (
-    state === "HEALTHY" ||
-    state === "CONNECTED" ||
-    state === "LIVE" ||
-    state === "SYNCED" ||
-    state === "LINK_HEALTHY" ||
-    state === "CLEAN"
-  ) {
-    return "border-emerald-500 bg-emerald-950/20 text-emerald-300";
-  }
-
-  if (
-    state === "DEGRADED" ||
-    state === "RECONNECTING" ||
-    state === "STALE" ||
-    state === "UNKNOWN" ||
-    state === "LINK_DEGRADED" ||
-    state === "LINK_RECOVERING" ||
-    state === "WARNING"
-  ) {
-    return "border-amber-500 bg-amber-950/20 text-amber-300";
-  }
-
-  if (
-    state === "FAIL_SAFE" ||
-    state === "OFFLINE" ||
-    state === "DESYNCED" ||
-    state === "LINK_OFFLINE" ||
-    state === "ERROR"
-  ) {
-    return "border-red-500 bg-red-950/20 text-red-300";
-  }
-
-  return "border-slate-700 bg-slate-950 text-slate-300";
+  if (severity === "healthy") return "border border-emerald-500/40";
+  if (severity === "warning") return "border border-amber-500/60";
+  if (severity === "critical") return "border border-red-500/70";
+  return "border border-slate-800";
 }
