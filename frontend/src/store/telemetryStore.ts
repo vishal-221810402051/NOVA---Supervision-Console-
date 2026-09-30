@@ -111,6 +111,7 @@ type TelemetryState = {
   connectionState: ConnectionState;
   activeTelemetrySource: TelemetrySourceStatus;
   lastPacketAt: string | null;
+  lastAcceptedPacketReceiptMonotonicMs: number | null;
   packetCount: number;
   packetRateHz: number;
   packetWindow: number[];
@@ -263,6 +264,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     reconnect_attempts: 0,
   },
   lastPacketAt: null,
+  lastAcceptedPacketReceiptMonotonicMs: null,
   packetCount: 0,
   packetRateHz: 0,
   packetWindow: [],
@@ -306,7 +308,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   linkRegistry: createInitialLinkRegistry(),
   linkRegistrySummary: getLinkRegistrySummary(createInitialLinkRegistry()),
   globalHealth: getGlobalSystemHealth(createInitialDeviceRegistry()),
-  isTelemetryStale: false,
+  isTelemetryStale: true,
   logs: [],
   soakMetrics: createInitialSoakMetrics(),
 
@@ -325,6 +327,12 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
 
       return {
         connectionState: sourceState,
+        lastAcceptedPacketReceiptMonotonicMs:
+          sourceState === "CONNECTED"
+            ? state.lastAcceptedPacketReceiptMonotonicMs
+            : null,
+        isTelemetryStale:
+          sourceState === "CONNECTED" ? state.isTelemetryStale : true,
         activeTelemetrySource: {
           ...state.activeTelemetrySource,
           connection_state: sourceState,
@@ -371,9 +379,9 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       const agedRegistry = ageDeviceRegistry(state.deviceRegistry);
       const globalHealth = getGlobalSystemHealth(agedRegistry);
       const isTelemetryStale =
-        state.lastPacketAt === null
+        state.lastAcceptedPacketReceiptMonotonicMs === null
           ? true
-          : Date.now() - new Date(state.lastPacketAt).getTime() > 3000;
+          : getMonotonicNowMs() - state.lastAcceptedPacketReceiptMonotonicMs > 3000;
 
       return {
         deviceRegistry: agedRegistry,
@@ -464,6 +472,8 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       latestRtcSyncResult: null,
       rtcDriftBaseline: null,
       persistentEvidenceSummary: null,
+      lastAcceptedPacketReceiptMonotonicMs: null,
+      isTelemetryStale: true,
     }),
 
   recordPacketRejection: (result) =>
@@ -853,6 +863,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         ...acceptedEventUpdate,
         ...baseObservedUpdate,
         lastPacketAt: packet.timestamp_utc,
+        lastAcceptedPacketReceiptMonotonicMs: getMonotonicNowMs(),
         lastAcceptedSequenceNumber: globalSequenceNumber,
         sourceSequences,
         missedPackets: state.missedPackets + gap,
@@ -905,6 +916,10 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       };
     }),
 }));
+
+function getMonotonicNowMs() {
+  return performance.now();
+}
 
 function getPacketKey(packet: TelemetryPacket) {
   return `${packet.stream_id}:${packet.source_node_id}:${packet.event_type}:${packet.source_sequence_number}:${getGlobalSequenceNumber(packet)}`;
