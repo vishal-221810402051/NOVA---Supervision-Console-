@@ -168,7 +168,7 @@ function TopologyChain({
       description="Operator console to gateway and telemetry processors"
       action={<StatusChip tone={toneForState(connectionState)}>{humanizeState(connectionState)}</StatusChip>}
     >
-      <div className="grid min-w-0 grid-cols-1 gap-3 [min-width:1366px]:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,1fr)]">
+      <div className="grid min-w-0 grid-cols-1 gap-3 min-[1366px]:grid-cols-[minmax(0,1fr)_7rem_minmax(0,1fr)_7rem_minmax(0,1fr)_7rem_minmax(0,1fr)]">
         <NodeCard nodeId="laptop_console" device={laptop} connectionState={connectionState} />
         <LinkCard link={linkLaptopPi} />
         <NodeCard nodeId="pi_gateway" device={piGateway} />
@@ -201,8 +201,8 @@ function NodeCard({
       : "Awaiting node health");
 
   return (
-    <article className={`min-w-0 rounded-md border bg-slate-950/80 p-4 ${borderClass(healthState)}`}>
-      <div className="flex min-w-0 items-start justify-between gap-3">
+    <article className={`min-w-0 rounded-md border bg-slate-950/80 p-4 min-[1366px]:p-3 ${borderClass(healthState)}`}>
+      <div className="flex min-w-0 items-start justify-between gap-3 min-[1366px]:flex-col">
         <div className="min-w-0">
           <h3 className="break-words text-sm font-semibold text-slate-100">{meta.label}</h3>
           <p className="mt-1 break-words text-xs text-slate-400">{meta.role}</p>
@@ -212,7 +212,7 @@ function NodeCard({
         </StatusChip>
       </div>
 
-      <dl className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2 [min-width:1366px]:grid-cols-1">
+      <dl className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2 min-[1366px]:grid-cols-1">
         <CompactMetric
           label="Heartbeat"
           value={device?.heartbeat_age_ms == null ? "Not available" : `${Math.round(device.heartbeat_age_ms)} ms ago`}
@@ -252,28 +252,28 @@ function LinkCard({ link }: { link: LinkCardData }) {
   const severity = getLinkSeverity(link);
 
   return (
-    <article className={`min-w-0 rounded-md border bg-slate-900/75 p-4 ${severityBorderClass(severity)}`}>
-      <div className="flex min-w-0 items-start gap-3">
+    <article className={`min-w-0 rounded-md border bg-slate-900/75 p-4 min-[1366px]:p-3 ${severityBorderClass(severity)}`}>
+      <div className="flex min-w-0 items-start gap-3 min-[1366px]:flex-col min-[1366px]:gap-2">
         <HeartbeatDot state={link.link_state} />
         <div className="min-w-0 flex-1">
-          <h3 className="break-words text-sm font-semibold text-slate-100">{link.display_name}</h3>
-          <p className="mt-1 text-xs text-slate-400">Communication link</p>
+          <h3 className="break-words text-sm font-semibold text-slate-100 min-[1366px]:text-xs">{link.display_name}</h3>
+          <p className="mt-1 text-xs text-slate-400 min-[1366px]:hidden">Communication link</p>
         </div>
       </div>
 
-      <div className="mt-4 flex min-w-0 flex-wrap gap-2">
+      <div className="mt-4 flex min-w-0 flex-wrap gap-2 min-[1366px]:mt-3 min-[1366px]:gap-1.5">
         <StatusChip tone={toneForState(link.link_state)}>{humanizeState(link.link_state)}</StatusChip>
         <StatusChip tone={toneForState(link.sync_state)}>{humanizeState(link.sync_state)}</StatusChip>
       </div>
 
-      <dl className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2 [min-width:1366px]:grid-cols-1">
+      <dl className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2 min-[1366px]:hidden">
         <CompactMetric label="Latency" value={link.round_trip_latency_ms == null ? "Not available" : `${link.round_trip_latency_ms} ms`} />
         <CompactMetric label="Heartbeat" value={link.heartbeat_age_ms == null ? "Not available" : `${Math.round(link.heartbeat_age_ms)} ms ago`} />
       </dl>
 
-      <p className="mt-4 break-words text-sm text-slate-300">{link.status_message}</p>
+      <p className="mt-4 break-words text-sm text-slate-300 min-[1366px]:hidden">{link.status_message}</p>
 
-      <details className="mt-4 border-t border-slate-800 pt-3 text-xs">
+      <details className="mt-4 border-t border-slate-800 pt-3 text-xs min-[1366px]:hidden">
         <summary className="cursor-pointer rounded-sm font-medium text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
           Technical details
         </summary>
@@ -388,7 +388,7 @@ function DetailedLinkRegistry({ links }: { links: LinkCardData[] }) {
       <div className="grid min-w-0 gap-3">
         {links.map((link) => (
           <article key={link.link_id} className={`min-w-0 rounded-md border bg-slate-900/70 p-4 ${severityBorderClass(getLinkSeverity(link))}`}>
-            <div className="grid min-w-0 gap-4 [min-width:1366px]:grid-cols-[minmax(12rem,1.4fr)_repeat(4,minmax(8rem,0.7fr))] [min-width:1366px]:items-center">
+            <div className="grid min-w-0 gap-4 min-[1366px]:grid-cols-[minmax(12rem,1.4fr)_repeat(4,minmax(8rem,0.7fr))] min-[1366px]:items-center">
               <div className="min-w-0">
                 <h3 className="break-words text-sm font-semibold text-slate-100">{link.display_name}</h3>
                 <p className="mt-1 break-words text-xs text-slate-400">{link.status_message}</p>
@@ -405,6 +405,8 @@ function DetailedLinkRegistry({ links }: { links: LinkCardData[] }) {
               <dl className="mt-3 grid min-w-0 gap-2 text-slate-400 sm:grid-cols-2 lg:grid-cols-3">
                 <TechnicalRow label="Link ID" value={link.link_id} />
                 <TechnicalRow label="Transport" value={link.transport} />
+                <TechnicalRow label="Raw link state" value={link.link_state} />
+                <TechnicalRow label="Raw sync state" value={link.sync_state} />
                 <TechnicalRow label="Missed heartbeats" value={link.missed_heartbeat_count.toString()} />
               </dl>
             </details>
@@ -435,9 +437,9 @@ function CompactMetric({ label, value }: { label: string; value: string }) {
 
 function TechnicalRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] gap-2">
+    <div className="grid min-w-0 gap-1">
       <dt className="text-slate-500">{label}</dt>
-      <dd className="break-words font-mono text-slate-300">{value}</dd>
+      <dd className="break-all font-mono text-slate-300 [overflow-wrap:anywhere]">{value}</dd>
     </div>
   );
 }
